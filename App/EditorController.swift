@@ -72,7 +72,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         tv.backgroundColor = .textBackgroundColor
         tv.isVerticallyResizable = true
         tv.isHorizontallyResizable = false
-        tv.autoresizingMask = [.width]
+        tv.autoresizingMask = []
         tv.minSize = NSSize(width: 0, height: 0)
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         tv.textContainerInset = NSSize(width: 40, height: 40)
@@ -84,6 +84,8 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         scroll = NSScrollView()
         scroll.documentView = tv
         scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.horizontalScrollElasticity = .none
         scroll.autohidesScrollers = true
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.5
@@ -115,6 +117,8 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         let bar = NSStackView()
         bar.addView(status, in: .leading)
         bar.addView(zoomControl, in: .trailing)
+        zoomControl.setHuggingPriority(.required, for: .horizontal)
+        status.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 12, bottom: 4, right: 12)
         let root = DropStackView(views: [split, bar])
         root.orientation = .vertical
@@ -173,8 +177,10 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         attachStorage()
     }
 
+    /// Keeps the text view exactly as wide as the visible area, which zoom shrinks, so nothing scrolls sideways.
     @objc func layoutTextColumn() {
         let visible = scroll.contentView.bounds.width
+        if abs(textView.frame.width - visible) > 0.5 { textView.setFrameSize(NSSize(width: visible, height: textView.frame.height)) }
         let width = min(CGFloat(word.textWidth), max(200, visible - 48))
         textView.textContainer?.size = CGSize(width: width, height: 0)
         textView.textContainerInset = NSSize(width: max(24, (visible - width) / 2), height: 32)

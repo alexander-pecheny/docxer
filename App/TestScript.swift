@@ -99,6 +99,17 @@ enum TestScript {
                 log("marks \(m.comments.map { "\($0):done=\(ed!.word.comments[$0]?.done ?? false)" })")
             } else { log("marks none") }
         case "settings": SettingsWindow.shared.window?.orderBack(nil); log("zoom now \(Int(ed!.zoom * 100))%")
+        case "hscroll":
+            let clip = tv!.enclosingScrollView!.contentView
+            var target = clip.bounds
+            target.origin.x = 5000
+            clip.scroll(to: clip.constrainBoundsRect(target).origin)
+            tv!.enclosingScrollView!.reflectScrolledClipView(clip)
+            log("textView width \(Int(tv!.frame.width)), visible \(Int(clip.bounds.width)), scrolled x \(Int(clip.bounds.origin.x)), inset \(Int(tv!.textContainerInset.width)), container \(Int(tv!.textContainer!.size.width))")
+        case "bar":
+            let root = ed!.window!.contentView!
+            func dump(_ v: NSView, _ d: Int) { if d < 3 { log(String(repeating: "  ", count: d) + "\(type(of: v)) \(v.frame)"); v.subviews.forEach { dump($0, d + 1) } } }
+            dump(root.subviews.last!, 0); log("root \(root.frame)")
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")
