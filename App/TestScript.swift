@@ -110,6 +110,22 @@ enum TestScript {
             let root = ed!.window!.contentView!
             func dump(_ v: NSView, _ d: Int) { if d < 3 { log(String(repeating: "  ", count: d) + "\(type(of: v)) \(v.frame)"); v.subviews.forEach { dump($0, d + 1) } } }
             dump(root.subviews.last!, 0); log("root \(root.frame)")
+        case "pinch":  // "pinch 2": magnifies ×2 around the first image, as a trackpad pinch would
+            let sv = tv!.enclosingScrollView!
+            var imageAt = 0
+            ed!.storage.enumerateAttribute(.docxSealed, in: NSRange(location: 0, length: ed!.storage.length)) { v, r, stop in
+                if case .image? = (v as? Sealed)?.display { imageAt = r.location; stop.pointee = true }
+            }
+            func imageFrame() -> NSRect {
+                let lm = tv!.textLayoutManager!, tcm = lm.textContentManager!
+                guard let loc = tcm.location(tcm.documentRange.location, offsetBy: imageAt), let f = lm.textLayoutFragment(for: loc) else { return .zero }
+                return f.layoutFragmentFrame.offsetBy(dx: tv!.textContainerOrigin.x, dy: tv!.textContainerOrigin.y)
+            }
+            tv!.scrollRangeToVisible(NSRange(location: imageAt, length: 1))
+            let before = imageFrame(), container = tv!.textContainer!.size.width, width = tv!.frame.width
+            sv.setMagnification(sv.magnification * (Double(arg) ?? 2), centeredAt: NSPoint(x: before.midX, y: before.midY))
+            let after = imageFrame()
+            log("pinch: magnification \(sv.magnification), container \(container) -> \(tv!.textContainer!.size.width), textView \(Int(width)) -> \(Int(tv!.frame.width)), image \(before.origin) -> \(after.origin), image visible \(sv.contentView.bounds.intersects(after)), zoom label \(Int(ed!.zoom * 100))%")
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")

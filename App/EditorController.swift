@@ -14,6 +14,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private var commentsPane: CommentsPane!
     private var status: NSTextField!
     private var zoomControl: ZoomControl!
+    private var textZoom: CGFloat = 1
     private var highlighted: [(NSRange, String)] = []
     private var toolbarItems: ToolbarItems!
     private var refreshPending = false
@@ -84,13 +85,15 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         scroll = NSScrollView()
         scroll.documentView = tv
         scroll.hasVerticalScroller = true
-        scroll.hasHorizontalScroller = false
+        // Sideways scrolling only exists while pinched in, when the column is wider than the view.
+        scroll.hasHorizontalScroller = true
         scroll.horizontalScrollElasticity = .none
         scroll.autohidesScrollers = true
         scroll.allowsMagnification = true
-        scroll.minMagnification = 0.5
-        scroll.maxMagnification = 4
-        scroll.magnification = Settings.defaultZoom
+        textZoom = Settings.defaultZoom
+        scroll.minMagnification = textZoom
+        scroll.maxMagnification = textZoom * Self.maxPinch
+        scroll.magnification = textZoom
         scroll.contentView.postsFrameChangedNotifications = true
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(layoutTextColumn), name: NSView.frameDidChangeNotification, object: scroll.contentView)
@@ -113,7 +116,6 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
 
         zoomControl = ZoomControl(controller: self)
         zoomControl.show(scroll.magnification)
-        NotificationCenter.default.addObserver(self, selector: #selector(zoomChanged), name: NSScrollView.didEndLiveMagnifyNotification, object: scroll)
         let bar = NSStackView()
         bar.addView(status, in: .leading)
         bar.addView(zoomControl, in: .trailing)
@@ -177,9 +179,10 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         attachStorage()
     }
 
-    /// Keeps the text view exactly as wide as the visible area, which zoom shrinks, so nothing scrolls sideways.
+    /// Fits the text column to the view at the text zoom. Pinching magnifies on top of this without refitting,
+    /// so the text keeps its line breaks and the pinched spot stays put.
     @objc func layoutTextColumn() {
-        let visible = scroll.contentView.bounds.width
+        let visible = scroll.contentView.frame.width / textZoom
         if abs(textView.frame.width - visible) > 0.5 { textView.setFrameSize(NSSize(width: visible, height: textView.frame.height)) }
         let width = min(CGFloat(word.textWidth), max(200, visible - 48))
         textView.textContainer?.size = CGSize(width: width, height: 0)
@@ -400,15 +403,18 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         layoutTextColumn()
     }
 
-    var zoom: CGFloat { scroll.magnification }
+    /// Text zoom: scales and rewraps the text. Pinch magnification sits on top of it.
+    var zoom: CGFloat { textZoom }
+    static let maxPinch: CGFloat = 6
 
+    /// Sets the text zoom and drops any pinch magnification.
     func setZoom(_ z: CGFloat) {
-        scroll.magnification = min(4, max(0.5, z))
-        zoomChanged()
-    }
-
-    @objc private func zoomChanged() {
-        zoomControl.show(scroll.magnification)
+        textZoom = min(4, max(0.5, z))
+        scroll.minMagnification = min(scroll.minMagnification, textZoom)
+        scroll.magnification = textZoom
+        scroll.minMagnification = textZoom
+        scroll.maxMagnification = textZoom * Self.maxPinch
+        zoomControl.show(textZoom)
         layoutTextColumn()
     }
 
