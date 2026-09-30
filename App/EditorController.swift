@@ -14,6 +14,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private var commentsPane: CommentsPane!
     private var status: NSTextField!
     private var zoomControl: ZoomControl!
+    private var highlighted: [(NSRange, String)] = []
     private var toolbarItems: ToolbarItems!
     private var refreshPending = false
     private var relabelPending = false
@@ -87,7 +88,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.5
         scroll.maxMagnification = 4
-        scroll.magnification = CGFloat(UserDefaults.standard.double(forKey: "zoom").nonZero ?? 1.25)
+        scroll.magnification = CGFloat(UserDefaults.standard.double(forKey: "zoom").nonZero ?? Self.defaultZoom)
         scroll.contentView.postsFrameChangedNotifications = true
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(layoutTextColumn), name: NSView.frameDidChangeNotification, object: scroll.contentView)
@@ -143,8 +144,10 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private func attachStorage() {
         contentStorage.textStorage = storage
         storage.delegate = self
+        highlighted = []
         if let lm = textView.textLayoutManager {
             lm.removeRenderingAttribute(.backgroundColor, for: lm.documentRange)
+            lm.removeRenderingAttribute(.foregroundColor, for: lm.documentRange)
             lm.invalidateLayout(for: lm.documentRange)
         }
         textView.isEditable = !doc.isLoading
@@ -399,7 +402,10 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     }
 
     @objc private func zoomChanged() {
-        UserDefaults.standard.set(Double(scroll.magnification), forKey: "zoom")
+        // Test runs share the user's settings, so they leave the zoom alone.
+        if !UserDefaults.standard.bool(forKey: "DocxerBackgroundTest") {
+            UserDefaults.standard.set(Double(scroll.magnification), forKey: "zoom")
+        }
         zoomControl.show(scroll.magnification)
         layoutTextColumn()
     }
@@ -459,21 +465,49 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
 
     // MARK: anchor highlighting
 
-    func highlightAnchors(_ ranges: [NSRange], selected: NSRange?) {
+    /// Comment anchors look like a highlighter pen: light yellow with dark text, in both appearances.
+    static let commentTint = NSColor(srgbRed: 1, green: 0.94, blue: 0.6, alpha: 1)
+    static let selectedTint = NSColor(srgbRed: 1, green: 0.82, blue: 0.3, alpha: 1)
+    static let resolvedTint = NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        ? NSColor(white: 1, alpha: 0.08) : NSColor(white: 0, alpha: 0.06) }
+
+    /// Tints every commented character: resolved threads faintly, the selected thread strongest.
+    func highlightAnchors(selected: Comment?) {
         guard let lm = textView.textLayoutManager, let tcm = lm.textContentManager else { return }
-        lm.removeRenderingAttribute(.backgroundColor, for: tcm.documentRange)
+        let comments = word.comments
+        let selectedIds = selected.map { Set([$0.id] + comments.replies(to: $0).map(\.id)) } ?? []
+        var next: [(NSRange, NSColor, Bool)] = []
+        storage.enumerateAttribute(.docxMarks, in: NSRange(location: 0, length: storage.length)) { v, r, _ in
+            guard let m = v as? MarkSet, !m.comments.isEmpty else { return }
+            if !selectedIds.isDisjoint(with: m.comments) { next.append((r, Self.selectedTint, true)) } else if m.comments.allSatisfy({ comments[$0]?.done == true }) {
+                next.append((r, Self.resolvedTint, false))
+            } else { next.append((r, Self.commentTint, true)) }
+        }
         func textRange(_ r: NSRange) -> NSTextRange? {
-            guard let s = tcm.location(tcm.documentRange.location, offsetBy: r.location),
+            guard NSMaxRange(r) <= storage.length, let s = tcm.location(tcm.documentRange.location, offsetBy: r.location),
                   let e = tcm.location(s, offsetBy: r.length) else { return nil }
             return NSTextRange(location: s, end: e)
         }
-        for r in ranges { if let tr = textRange(r) { lm.addRenderingAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.25), for: tr) } }
-        if let selected, let tr = textRange(selected) {
-            lm.addRenderingAttribute(.backgroundColor, value: NSColor.systemYellow.withAlphaComponent(0.6), for: tr)
+        let changed = Set(highlighted.map { "\($0.0)\($0.1)" }) != Set(next.map { "\($0.0)\($0.1.hash)" })
+        lm.removeRenderingAttribute(.backgroundColor, for: tcm.documentRange)
+        lm.removeRenderingAttribute(.foregroundColor, for: tcm.documentRange)
+        for (r, tint, dark) in next {
+            guard let tr = textRange(r) else { continue }
+            lm.addRenderingAttribute(.backgroundColor, value: tint, for: tr)
+            if dark { lm.addRenderingAttribute(.foregroundColor, value: NSColor.black, for: tr) }
         }
-        // Rendering attributes do not redraw on their own.
-        lm.invalidateRenderingAttributes(for: tcm.documentRange)
-        textView.needsDisplay = true
+        // Fragments draw into cached layers, so re-lay out the ones whose tint changed.
+        if changed {
+            for r in Set(highlighted.map(\.0) + next.map(\.0)) {
+                if let tr = textRange((storage.string as NSString).paragraphRange(for: NSRange(location: min(r.location, max(0, storage.length - 1)), length: 0))) {
+                    lm.invalidateLayout(for: tr)
+                }
+            }
+            lm.textViewportLayoutController.layoutViewport()
+            func redraw(_ v: NSView) { v.needsDisplay = true; v.subviews.forEach(redraw) }
+            redraw(textView)
+        }
+        highlighted = next.map { ($0.0, "\($0.1.hash)") }
     }
 }
 

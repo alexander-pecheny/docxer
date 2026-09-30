@@ -56,7 +56,10 @@ enum TestScript {
                 ed!.reply(to: c, arg)
             }
         case "resolve":
-            if let c = ed!.word.commentAnchors(ed!.storage).compactMap({ ed!.word.comments[$0.id] }).first { ed!.setDone(c, true) }
+            if let c = ed!.word.commentAnchors(ed!.storage).compactMap({ ed!.word.comments[$0.id] }).first {
+                ed!.setDone(c, true)
+                log("resolved \(c.id) \(c.text.prefix(20)) done=\(c.done)")
+            }
         case "outline": ed!.toggleOutline(nil)
         case "font": ed!.setFont(family: arg)
         case "size": ed!.setFont(size: Double(arg))
@@ -90,6 +93,11 @@ enum TestScript {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
                 log("drop on \(parts[0]): accepted \(op.rawValue != 0), performed \(ok), documents \(before) -> \(NSDocumentController.shared.documents.count)")
             }
+        case "marks":
+            let r = (tv!.string as NSString).range(of: arg)
+            if let m = ed!.storage.attribute(.docxMarks, at: r.location, effectiveRange: nil) as? MarkSet {
+                log("marks \(m.comments.map { "\($0):done=\(ed!.word.comments[$0]?.done ?? false)" })")
+            } else { log("marks none") }
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")

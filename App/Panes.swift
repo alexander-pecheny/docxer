@@ -163,7 +163,7 @@ final class CommentsPane: NSObject {
             card.layer?.borderColor = (id == selectedId ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
             card.layer?.borderWidth = id == selectedId ? 2 : 1
         }
-        c.highlightAnchors(threads.filter { !$0.comment.done }.map(\.range), selected: hit?.range)
+        c.highlightAnchors(selected: hit?.comment)
     }
 
     private func label(_ s: String, bold: Bool = false, secondary: Bool = false) -> NSTextField {

@@ -107,7 +107,7 @@ enum MainMenu {
             item("Show Comments", #selector(EditorController.toggleComments(_:)), "c", [.command, .control]), sep(),
             item("Zoom In", #selector(EditorController.zoomIn(_:)), "="),
             item("Zoom Out", #selector(EditorController.zoomOut(_:)), "-"),
-            item("Actual Size", #selector(EditorController.zoomReset(_:)), "0"), sep(),
+            item("Default Zoom (150%)", #selector(EditorController.zoomReset(_:)), "0"), sep(),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ])
         let window = NSMenu(title: "Window")
