@@ -88,7 +88,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         scroll.allowsMagnification = true
         scroll.minMagnification = 0.5
         scroll.maxMagnification = 4
-        scroll.magnification = CGFloat(UserDefaults.standard.double(forKey: "zoom").nonZero ?? Self.defaultZoom)
+        scroll.magnification = Settings.defaultZoom
         scroll.contentView.postsFrameChangedNotifications = true
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(layoutTextColumn), name: NSView.frameDidChangeNotification, object: scroll.contentView)
@@ -402,10 +402,6 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     }
 
     @objc private func zoomChanged() {
-        // Test runs share the user's settings, so they leave the zoom alone.
-        if !UserDefaults.standard.bool(forKey: "DocxerBackgroundTest") {
-            UserDefaults.standard.set(Double(scroll.magnification), forKey: "zoom")
-        }
         zoomControl.show(scroll.magnification)
         layoutTextColumn()
     }

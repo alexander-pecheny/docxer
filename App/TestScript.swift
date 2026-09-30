@@ -98,6 +98,7 @@ enum TestScript {
             if let m = ed!.storage.attribute(.docxMarks, at: r.location, effectiveRange: nil) as? MarkSet {
                 log("marks \(m.comments.map { "\($0):done=\(ed!.word.comments[$0]?.done ?? false)" })")
             } else { log("marks none") }
+        case "settings": SettingsWindow.shared.window?.orderBack(nil); log("zoom now \(Int(ed!.zoom * 100))%")
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")

@@ -95,11 +95,10 @@ extension EditorController {
 
 extension EditorController {
     static let zoomSteps: [CGFloat] = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4]
-    static let defaultZoom: CGFloat = 1.5
 
     @objc func zoomIn(_ sender: Any?) { setZoom(Self.zoomSteps.first { $0 > zoom + 0.01 } ?? zoom) }
     @objc func zoomOut(_ sender: Any?) { setZoom(Self.zoomSteps.last { $0 < zoom - 0.01 } ?? zoom) }
-    @objc func zoomReset(_ sender: Any?) { setZoom(Self.defaultZoom) }
+    @objc func zoomReset(_ sender: Any?) { setZoom(Settings.defaultZoom) }
     @objc func zoomFromMenu(_ sender: NSMenuItem) { setZoom(CGFloat(sender.tag) / 100) }
 }
 
