@@ -26,3 +26,14 @@ tools/validate.sh --json DIR/*.docx   # Open XML SDK validator; compare N.docx a
 ```
 
 The app accepts `-DocxerTiming YES` (startup and save times on stderr) and, for tests that must not take focus, `-DocxerBackgroundTest YES -DocxerScript FILE` (see `App/TestScript.swift`).
+
+## Release
+
+Forgejo is the source; https://github.com/alexander-pecheny/docxer is a push mirror, which deletes refs that exist only on GitHub. So tag on Forgejo, then publish the release on GitHub:
+
+```sh
+git tag v0.2 && git push origin v0.2
+gh release create v0.2 --repo alexander-pecheny/docxer --verify-tag --generate-notes
+```
+
+Publishing runs `.github/workflows/release.yml`, which tests the core, builds a universal app versioned from the tag and attaches `Docxer-0.2.zip`. The build is ad-hoc signed, so on another Mac the first launch needs right-click › Open.
