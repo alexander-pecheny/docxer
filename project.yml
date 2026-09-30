@@ -1,0 +1,51 @@
+name: Docxer
+options:
+  bundleIdPrefix: me.pecheny
+  deploymentTarget:
+    macOS: "15.0"
+packages:
+  DocxCore:
+    path: DocxCore
+targets:
+  Docxer:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: DocxCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: me.pecheny.docxer
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"
+        CODE_SIGN_IDENTITY: "-"
+        ENABLE_HARDENED_RUNTIME: NO
+        DEAD_CODE_STRIPPING: YES
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: App/Info.plist
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Docxer
+        CFBundleName: Docxer
+        NSPrincipalClass: NSApplication
+        LSApplicationCategoryType: public.app-category.productivity
+        NSSupportsAutomaticTermination: false
+        NSSupportsSuddenTermination: false
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Word Document
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.openxmlformats.wordprocessingml.document]
+            NSDocumentClass: Docxer.DocxDocument
+          - CFBundleTypeName: Word Macro-Enabled Document
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.openxmlformats.wordprocessingml.document.macroenabled]
+            NSDocumentClass: Docxer.DocxDocument
+          - CFBundleTypeName: Word Template
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.openxmlformats.wordprocessingml.template]
+            NSDocumentClass: Docxer.DocxDocument

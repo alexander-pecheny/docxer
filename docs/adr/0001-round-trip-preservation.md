@@ -1,0 +1,3 @@
+# Preserve the original XML instead of regenerating the document
+
+A saved document keeps every Part it did not change byte for byte, and edited paragraphs are rewritten from their original XML rather than from an app-owned model. Anything the app does not understand becomes a Locked Region and is carried through untouched. We chose this over parsing into our own model and writing a fresh `.docx`, which is simpler but silently drops unsupported content, as LibreOffice does. The cost is that every editing feature must know how to patch the original XML, and new features cannot assume a clean model.
