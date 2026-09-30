@@ -1,6 +1,8 @@
 name: Release
 
-# Builds Docxer when a GitHub release is published and attaches the zipped app to it.
+# Builds Docxer when a GitHub release is published, signs it with Developer ID, notarises it,
+# and attaches the zipped app to the release. Secrets: DEVELOPER_ID_P12 (base64), DEVELOPER_ID_P12_PASSWORD,
+# ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (App Store Connect API key for notarytool).
 on:
   release:
     types: [published]
@@ -38,6 +40,40 @@ jobs:
             -derivedDataPath build/dd -destination 'generic/platform=macOS' \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" build
 
+      - name: Sign
+        env:
+          P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KC_PASS="$(openssl rand -base64 24)"
+          security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PASS" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
+            --sign "Developer ID Application" build/dd/Build/Products/Release/Docxer.app
+          codesign --verify --strict --verbose=2 build/dd/Build/Products/Release/Docxer.app
+
+      - name: Notarise
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          APP=build/dd/Build/Products/Release/Docxer.app
+          echo "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarise.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" --key "$RUNNER_TEMP/key.p8" \
+            --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait --timeout 30m
+          rm "$RUNNER_TEMP/key.p8"
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
+
       - name: Package and upload
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,3 +81,7 @@ jobs:
           ZIP="Docxer-${TAG#v}.zip"
           ditto -c -k --keepParent build/dd/Build/Products/Release/Docxer.app "$ZIP"
           gh release upload "$TAG" "$ZIP" --clobber
+
+      - name: Remove the signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true

@@ -36,4 +36,4 @@ git tag v0.2 && git push origin v0.2
 gh release create v0.2 --repo alexander-pecheny/docxer --verify-tag --generate-notes
 ```
 
-Publishing runs `.github/workflows/release.yml`, which tests the core, builds a universal app versioned from the tag and attaches `Docxer-0.2.zip`. The build is ad-hoc signed, so on another Mac the first launch needs right-click › Open.
+Publishing runs `.github/workflows/release.yml`, which tests the core, builds a universal app versioned from the tag, signs it with the Developer ID certificate, notarises and staples it, and attaches `Docxer-0.2.zip`. The signing certificate and App Store Connect API key live in the GitHub repo's Actions secrets.
