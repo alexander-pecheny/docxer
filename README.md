@@ -12,6 +12,8 @@ xcodebuild -project Docxer.xcodeproj -scheme Docxer -configuration Release -deri
 open build/dd/Build/Products/Release/Docxer.app
 ```
 
+Install to /Applications with `tools/install.sh`.
+
 ## Test
 
 ```sh
