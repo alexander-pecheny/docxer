@@ -42,7 +42,9 @@ final class EditorTextView: NSTextView, NSTextLayoutManagerDelegate {
     // MARK: copy and paste
 
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [Self.fragmentType, .string] }
-    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] { [Self.fragmentType, .string] }
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] { [Self.fragmentType, .fileURL, .png, .tiff, .string] }
+
+    static let documentExtensions: Set<String> = ["docx", "docm", "dotx"]
 
     override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
         guard let storage = textStorage, let doc = editor?.word else { return false }
@@ -68,6 +70,18 @@ final class EditorTextView: NSTextView, NSTextLayoutManagerDelegate {
     }
 
     override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        if type == .fileURL, let urls = pboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] {
+            // Word files open as documents; image files are inserted; anything else is refused.
+            let docs = urls.filter { Self.documentExtensions.contains($0.pathExtension.lowercased()) }
+            for url in docs { NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in } }
+            let images = urls.filter { !docs.contains($0) }.compactMap { url in (try? Data(contentsOf: url)).map { ($0, url.pathExtension) } }
+            for (data, ext) in images { editor?.insertImage(data, ext: ext) }
+            return !docs.isEmpty || !images.isEmpty
+        }
+        if type == .png || type == .tiff, let data = pboard.data(forType: type) {
+            editor?.insertImage(data, ext: type == .png ? "png" : "tiff")
+            return true
+        }
         let range = rangeForUserTextChange
         guard range.location != NSNotFound else { return false }
         if type == Self.fragmentType, let token = pboard.string(forType: Self.fragmentType), let clip = Self.clipboard,

@@ -145,3 +145,45 @@ extension EditingTests {
         XCTAssertEqual(s2.string, "first\npara\n")
     }
 }
+
+extension EditingTests {
+    func testFontFamilyAndSize() throws {
+        let d = WordDocument.blank()
+        let s = d.load(styler: nil)
+        edit(d, s, NSRange(location: 0, length: 0), "Some text")
+        d.setFont(family: "Georgia", size: 18, in: s, range: NSRange(location: 0, length: 4))
+        let (d2, s2) = try reopen(d, s)
+        let run = s2.attribute(.docxRun, at: 0, effectiveRange: nil) as! RunProps
+        XCTAssertEqual(run.format.font, "Georgia")
+        XCTAssertEqual(run.format.size, 18)
+        XCTAssertEqual(d2.commonFont(in: s2, range: NSRange(location: 0, length: 4)).size, 18)
+        XCTAssertNil(d2.commonFont(in: s2, range: NSRange(location: 0, length: 9)).size, "mixed sizes")
+        // Setting the style's own size removes the override.
+        d2.setFont(size: 12, in: s2, range: NSRange(location: 0, length: 4))
+        XCTAssertFalse((s2.attribute(.docxRun, at: 0, effectiveRange: nil) as! RunProps).rPr.contains { $0.name == "w:sz" })
+    }
+
+    func testInsertImage() throws {
+        let d = WordDocument.blank()
+        let s = d.load(styler: nil)
+        edit(d, s, NSRange(location: 0, length: 0), "ab")
+        let png: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0,
+                            0x1F, 0x15, 0xC4, 0x89, 0, 0, 0, 13, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0xF8, 0xCF, 0xC0, 0xF0, 0x1F, 0, 5, 0,
+                            1, 0xFF, 0x89, 0x99, 0x3D, 0x1D, 0, 0, 0, 0, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82]
+        let img = d.makeImage(png, ext: "png", width: 900, height: 450)
+        var a = s.attributes(at: 0, effectiveRange: nil)
+        a[.docxSealed] = img
+        s.insert(NSAttributedString(string: "\u{FFFC}", attributes: a), at: 1)
+        d.normalize(s, editedRange: NSRange(location: 1, length: 1))
+        let bytes = d.save(s)
+        if let out = ProcessInfo.processInfo.environment["DOCX_TEST_OUT"] { try Data(bytes).write(to: URL(fileURLWithPath: out)) }
+        let d2 = try WordDocument(bytes: bytes)
+        let s2 = d2.load(styler: nil)
+        guard case .image(let rel, let w, let h)? = (s2.attribute(.docxSealed, at: 1, effectiveRange: nil) as? Sealed)?.display else {
+            return XCTFail("no image")
+        }
+        XCTAssertEqual(w, d.textWidth, accuracy: 0.5)
+        XCTAssertEqual(h, d.textWidth / 2, accuracy: 0.5)
+        XCTAssertEqual(d2.package.partPath(forRelationship: rel).flatMap { d2.package.part($0) }, png)
+    }
+}

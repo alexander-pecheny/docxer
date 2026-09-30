@@ -29,6 +29,9 @@ targets:
       properties:
         CFBundleDisplayName: Docxer
         CFBundleName: Docxer
+        CFBundleIconFile: AppIcon
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSPrincipalClass: NSApplication
         LSApplicationCategoryType: public.app-category.productivity
         NSSupportsAutomaticTermination: false

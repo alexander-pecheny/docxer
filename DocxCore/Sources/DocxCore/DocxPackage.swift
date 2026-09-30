@@ -88,6 +88,14 @@ public final class DocxPackage {
         }
     }
 
+    /// Declares a content type for a file extension unless one exists.
+    public func ensureDefaultContentType(ext: String, type: String) {
+        let ct = String(decoding: part("[Content_Types].xml") ?? [], as: UTF8.self)
+        guard !ct.lowercased().contains("extension=\"\(ext.lowercased())\"") else { return }
+        setPart("[Content_Types].xml", Array(ct.replacingOccurrences(of: "</Types>",
+                                                                    with: "<Default Extension=\"\(ext)\" ContentType=\"\(type)\"/></Types>").utf8))
+    }
+
     /// Switches the main part's content type, e.g. from template to document.
     public func setMainContentType(_ type: String) {
         let ct = String(decoding: part("[Content_Types].xml") ?? [], as: UTF8.self)

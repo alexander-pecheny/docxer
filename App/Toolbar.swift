@@ -1,15 +1,20 @@
 import AppKit
 import DocxCore
 
-final class ToolbarItems: NSObject, NSToolbarDelegate {
+final class ToolbarItems: NSObject, NSToolbarDelegate, NSMenuDelegate, NSComboBoxDelegate {
     private weak var controller: EditorController?
     private let stylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let fontPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let sizeBox = NSComboBox()
+    private var fontsLoaded = false
     private let format = NSSegmentedControl()
     private let lists = NSSegmentedControl()
 
     private static let outline = NSToolbarItem.Identifier("outline")
     private static let style = NSToolbarItem.Identifier("style")
     private static let format = NSToolbarItem.Identifier("format")
+    private static let font = NSToolbarItem.Identifier("font")
+    private static let size = NSToolbarItem.Identifier("size")
     private static let lists = NSToolbarItem.Identifier("lists")
     private static let comment = NSToolbarItem.Identifier("comment")
     private static let comments = NSToolbarItem.Identifier("comments")
@@ -20,6 +25,18 @@ final class ToolbarItems: NSObject, NSToolbarDelegate {
         stylePopup.target = self
         stylePopup.action = #selector(stylePicked)
         stylePopup.widthAnchor.constraint(equalToConstant: 150).isActive = true
+
+        // The family list has hundreds of entries, so it is built on first open, not at launch.
+        fontPopup.menu?.delegate = self
+        fontPopup.target = self
+        fontPopup.action = #selector(fontPicked)
+        fontPopup.widthAnchor.constraint(equalToConstant: 150).isActive = true
+        sizeBox.addItems(withObjectValues: EditorController.fontSizes.map { formatSize($0) })
+        sizeBox.numberOfVisibleItems = 12
+        sizeBox.delegate = self
+        sizeBox.target = self
+        sizeBox.action = #selector(sizeEntered)
+        sizeBox.widthAnchor.constraint(equalToConstant: 66).isActive = true
 
         format.segmentCount = 4
         format.trackingMode = .selectAny
@@ -53,8 +70,48 @@ final class ToolbarItems: NSObject, NSToolbarDelegate {
         update()
     }
 
+    private func formatSize(_ v: Double) -> String { v == v.rounded() ? "\(Int(v))" : String(format: "%.1f", v) }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === fontPopup.menu, !fontsLoaded else { return }
+        fontsLoaded = true
+        let current = fontPopup.titleOfSelectedItem
+        menu.removeAllItems()
+        for family in NSFontManager.shared.availableFontFamilies where !family.hasPrefix(".") {
+            let item = NSMenuItem(title: family, action: nil, keyEquivalent: "")
+            menu.addItem(item)
+        }
+        if let current { showFont(current) }
+    }
+
+    private func showFont(_ family: String?) {
+        guard let family else { fontPopup.select(nil); fontPopup.setTitle("—"); return }
+        if fontPopup.item(withTitle: family) == nil { fontPopup.addItem(withTitle: family) }
+        fontPopup.selectItem(withTitle: family)
+    }
+
+    @objc private func fontPicked() {
+        guard let family = fontPopup.titleOfSelectedItem, family != "—" else { return }
+        controller?.setFont(family: family)
+    }
+
+    @objc private func sizeEntered() {
+        let text = sizeBox.stringValue.replacingOccurrences(of: ",", with: ".")
+        guard let v = Double(text), v >= 1, v <= 1638 else { NSSound.beep(); update(); return }
+        controller?.setFont(size: (v * 2).rounded() / 2)
+    }
+
+    func comboBoxSelectionDidChange(_ notification: Notification) {
+        guard sizeBox.indexOfSelectedItem >= 0 else { return }
+        sizeBox.stringValue = sizeBox.itemObjectValue(at: sizeBox.indexOfSelectedItem) as? String ?? ""
+        sizeEntered()
+    }
+
     func update() {
         guard let c = controller else { return }
+        let f = c.currentFont
+        showFont(f.family)
+        sizeBox.stringValue = f.size.map(formatSize) ?? ""
         let style = c.currentStyle ?? c.word.styles.defaultParagraphStyle
         if let i = stylePopup.itemArray.firstIndex(where: { $0.representedObject as? String == style }) { stylePopup.selectItem(at: i) }
         for (i, t) in [RunProps.Toggle.bold, .italic, .underline, .strike].enumerated() { format.setSelected(c.isOn(t), forSegment: i) }
@@ -79,7 +136,7 @@ final class ToolbarItems: NSObject, NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [Self.outline, .flexibleSpace, Self.style, Self.format, Self.lists, .flexibleSpace, Self.comment, Self.comments]
+        [Self.outline, .flexibleSpace, Self.style, Self.font, Self.size, Self.format, Self.lists, .flexibleSpace, Self.comment, Self.comments]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -97,6 +154,12 @@ final class ToolbarItems: NSObject, NSToolbarDelegate {
         case Self.style:
             item.label = "Style"
             item.view = stylePopup
+        case Self.font:
+            item.label = "Font"
+            item.view = fontPopup
+        case Self.size:
+            item.label = "Size"
+            item.view = sizeBox
         case Self.format:
             item.label = "Format"
             item.view = format

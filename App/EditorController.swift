@@ -13,6 +13,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private var outlinePane: OutlinePane!
     private var commentsPane: CommentsPane!
     private var status: NSTextField!
+    private var zoomControl: ZoomControl!
     private var toolbarItems: ToolbarItems!
     private var refreshPending = false
     private var relabelPending = false
@@ -106,11 +107,19 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         status.font = .systemFont(ofSize: 11)
         status.textColor = .secondaryLabelColor
 
-        let bar = NSStackView(views: [status])
+        zoomControl = ZoomControl(controller: self)
+        zoomControl.show(scroll.magnification)
+        NotificationCenter.default.addObserver(self, selector: #selector(zoomChanged), name: NSScrollView.didEndLiveMagnifyNotification, object: scroll)
+        let bar = NSStackView()
+        bar.addView(status, in: .leading)
+        bar.addView(zoomControl, in: .trailing)
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 12, bottom: 4, right: 12)
         let root = NSStackView(views: [split, bar])
         root.orientation = .vertical
+        root.alignment = .leading
         root.spacing = 0
+        bar.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        split.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
         window.contentView = root
 
@@ -381,15 +390,20 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         layoutTextColumn()
     }
 
-    @objc func zoomIn(_ sender: Any?) { setZoom(scroll.magnification * 1.1) }
-    @objc func zoomOut(_ sender: Any?) { setZoom(scroll.magnification / 1.1) }
-    @objc func zoomReset(_ sender: Any?) { setZoom(1.25) }
+    var zoom: CGFloat { scroll.magnification }
 
-    private func setZoom(_ z: CGFloat) {
+    func setZoom(_ z: CGFloat) {
         scroll.magnification = min(4, max(0.5, z))
+        zoomChanged()
+    }
+
+    @objc private func zoomChanged() {
         UserDefaults.standard.set(Double(scroll.magnification), forKey: "zoom")
+        zoomControl.show(scroll.magnification)
         layoutTextColumn()
     }
+
+    func toolbarUpdate() { toolbarItems.update() }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {

@@ -315,6 +315,18 @@ final class CardView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) { onClick?() }
+
+    /// Clicks on comment text select the thread; only buttons and editors keep their own clicks.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        guard onClick != nil, let hit else { return hit }
+        var v: NSView? = hit
+        while let cur = v, cur !== self {
+            if cur is NSButton || cur is NSTextView { return hit }
+            v = cur.superview
+        }
+        return self
+    }
 }
 
 final class ClosureButton: NSButton {

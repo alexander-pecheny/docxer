@@ -56,6 +56,7 @@ enum MainMenu {
         recent.submenu = recentMenu
         submenu("File", [
             item("New", #selector(NSDocumentController.newDocument(_:)), "n"),
+            item("New Tab", #selector(NSResponder.newWindowForTab(_:)), "t"),
             item("Open…", #selector(NSDocumentController.openDocument(_:)), "o"),
             recent, sep(),
             item("Close", #selector(NSWindow.performClose(_:)), "w"),
@@ -92,14 +93,19 @@ enum MainMenu {
         ] + styleItems + [sep(),
             item("Bulleted List", #selector(EditorController.toggleBulletList(_:)), "l", [.command, .shift]),
             item("Numbered List", #selector(EditorController.toggleNumberedList(_:)), "n", [.command, .option]),
+            item("Bigger Font", #selector(EditorController.fontBigger(_:)), ".", [.command, .shift]),
+            item("Smaller Font", #selector(EditorController.fontSmaller(_:)), ",", [.command, .shift]),
             item("Increase List Level", #selector(EditorController.indentMore(_:)), "]"),
             item("Decrease List Level", #selector(EditorController.indentLess(_:)), "["),
         ])
-        submenu("Insert", [item("Comment", #selector(EditorController.newComment(_:)), "m", [.command, .option])])
+        submenu("Insert", [
+            item("Comment", #selector(EditorController.newComment(_:)), "m", [.command, .option]),
+            item("Image…", #selector(EditorController.insertImageFromFile(_:)), "i", [.command, .shift]),
+        ])
         submenu("View", [
             item("Show Outline", #selector(EditorController.toggleOutline(_:)), "s", [.command, .control]),
             item("Show Comments", #selector(EditorController.toggleComments(_:)), "c", [.command, .control]), sep(),
-            item("Zoom In", #selector(EditorController.zoomIn(_:)), "+"),
+            item("Zoom In", #selector(EditorController.zoomIn(_:)), "="),
             item("Zoom Out", #selector(EditorController.zoomOut(_:)), "-"),
             item("Actual Size", #selector(EditorController.zoomReset(_:)), "0"), sep(),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),

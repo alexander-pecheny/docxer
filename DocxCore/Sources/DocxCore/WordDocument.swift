@@ -15,6 +15,8 @@ public final class WordDocument {
     private let bodyStart: Int
     private let bodySuffix: Int
     public internal(set) var bodyEdited = false
+    var drawingIdCounter = 0
+    var needsDrawingNamespaces = false
     /// Width of the text column on the page, in points.
     public let textWidth: Double
 
@@ -156,6 +158,7 @@ public final class WordDocument {
         if bodyEdited {
             var w = BodyWriter(doc: self, text: s)
             var out = Array(docBytes[..<bodyStart])
+            if needsDrawingNamespaces { out = declaringDrawingNamespaces(out) }
             out.reserveCapacity(docBytes.count + 4096)
             w.write(into: &out)
             out += docBytes[bodySuffix...]
@@ -164,6 +167,18 @@ public final class WordDocument {
         }
         comments.write(present: present) { self.styles.styles[$0] != nil }
         return package.write()
+    }
+
+    /// Inserted images use the wp: and r: prefixes, which some writers never declare on the root.
+    private func declaringDrawingNamespaces(_ head: [UInt8]) -> [UInt8] {
+        var s = String(decoding: head, as: UTF8.self)
+        guard let r = s.range(of: "<w:document") else { return head }
+        for (prefix, uri) in [("wp", "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"),
+                              ("r", "http://schemas.openxmlformats.org/officeDocument/2006/relationships")]
+        where !s.contains("xmlns:\(prefix)=") {
+            s.insert(contentsOf: " xmlns:\(prefix)=\"\(uri)\"", at: r.upperBound)
+        }
+        return Array(s.utf8)
     }
 
     // MARK: helpers for BodyWriter

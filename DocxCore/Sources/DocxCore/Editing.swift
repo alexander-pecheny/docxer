@@ -44,6 +44,47 @@ public extension WordDocument {
         normalize(s, editedRange: range)
     }
 
+    /// Effective font family and size of a run, after styles.
+    func effectiveFont(_ run: RunProps, para: ParaProps) -> (family: String?, size: Double) {
+        var f = styles.resolved(paragraphStyle: para.styleId).1
+        if let cs = run.format.charStyle { f = f.overlaid(styles.resolved(characterStyle: cs)) }
+        f = f.overlaid(run.format)
+        return (f.font, f.size ?? 10)
+    }
+
+    /// The font family and size shared by all text in the range; nil where they differ.
+    func commonFont(in s: NSAttributedString, range: NSRange) -> (family: String??, size: Double?) {
+        var family: String?? = .none, size: Double?, first = true, mixedFamily = false, mixedSize = false
+        textRuns(s, range) { _, run, p in
+            let e = effectiveFont(run, para: p)
+            if first { family = .some(e.family); size = e.size; first = false; return }
+            if family != .some(e.family) { mixedFamily = true }
+            if size != e.size { mixedSize = true }
+        }
+        return (mixedFamily ? .none : family, mixedSize ? nil : size)
+    }
+
+    /// Sets font family and/or size as direct formatting; a value equal to the style's is removed instead.
+    func setFont(family: String? = nil, size: Double? = nil, in s: NSMutableAttributedString, range: NSRange) {
+        var changes: [(NSRange, RunProps)] = []
+        textRuns(s, range) { r, run, p in changes.append((r, fontChange(run, para: p, family: family, size: size))) }
+        for (r, props) in changes { s.addAttribute(.docxRun, value: props, range: r) }
+        normalize(s, editedRange: range)
+    }
+
+    func fontChange(_ run: RunProps, para: ParaProps, family: String?, size: Double?) -> RunProps {
+        var out = run
+        if let family {
+            let inherited = effectiveFont(run.with(font: nil), para: para).family
+            out = out.with(font: family == inherited ? nil : family)
+        }
+        if let size {
+            let inherited = effectiveFont(run.with(size: nil), para: para).size
+            out = out.with(size: size == inherited ? nil : size)
+        }
+        return out
+    }
+
     /// Run properties to type with after the caret moves, with a toggle flipped.
     func typing(_ t: RunProps.Toggle, _ run: RunProps, para: ParaProps) -> RunProps {
         let on = !isOn(t, run, para: para)
@@ -222,5 +263,50 @@ public extension WordDocument {
         if (t[.docxPara] as? ParaProps)?.isSealed == true { t[.docxPara] = nil }
         if t[.docxRun] == nil { t[.docxRun] = RunProps.plain }
         return t
+    }
+}
+
+public extension WordDocument {
+    /// Adds an image to the Package and returns the Sealed Object that shows it inline.
+    /// `width` and `height` are in points; the image is scaled down to fit the text column.
+    func makeImage(_ bytes: [UInt8], ext: String, width: Double, height: Double) -> Sealed {
+        let ext = ext.lowercased() == "jpg" ? "jpeg" : ext.lowercased()
+        var n = 1
+        while package.part("\(package.mainDirectory)/media/docxer\(n).\(ext)") != nil { n += 1 }
+        let path = "\(package.mainDirectory)/media/docxer\(n).\(ext)"
+        package.addPart(path, bytes: bytes, contentType: "image/\(ext)",
+                        relationshipType: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image")
+        package.ensureDefaultContentType(ext: ext, type: "image/\(ext)")
+        let rel = package.relationships.values.first { $0.target.hasSuffix("media/docxer\(n).\(ext)") }!.id
+        let scale = min(1, textWidth / max(width, 1))
+        let w = width * scale, h = height * scale
+        let cx = Int(w * 12700), cy = Int(h * 12700)
+        let id = nextDrawingId()
+        let a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+        let pic = "http://schemas.openxmlformats.org/drawingml/2006/picture"
+        let xml = """
+        <w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="\(cx)" cy="\(cy)"/>\
+        <wp:docPr id="\(id)" name="Picture \(id)"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="\(a)" noChangeAspect="1"/></wp:cNvGraphicFramePr>\
+        <a:graphic xmlns:a="\(a)"><a:graphicData uri="\(pic)"><pic:pic xmlns:pic="\(pic)"><pic:nvPicPr><pic:cNvPr id="\(id)" name="docxer\(n).\(ext)"/>\
+        <pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="\(rel)"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>\
+        <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="\(cx)" cy="\(cy)"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>\
+        </pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>
+        """
+        needsDrawingNamespaces = true
+        return Sealed(xml: xml, isBlock: false, display: .image(relId: rel, width: w, height: h))
+    }
+
+    private func nextDrawingId() -> Int {
+        if drawingIdCounter == 0 {
+            let s = String(decoding: docBytes, as: UTF8.self)
+            let re = regex(#"<wp:docPr [^>]*id="(\d+)""#)
+            var mx = 0
+            for m in re.matches(in: s, range: NSRange(s.startIndex..., in: s)) {
+                if let r = Range(m.range(at: 1), in: s), let v = Int(s[r]) { mx = max(mx, v) }
+            }
+            drawingIdCounter = mx
+        }
+        drawingIdCounter += 1
+        return drawingIdCounter
     }
 }

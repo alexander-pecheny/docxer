@@ -11,6 +11,12 @@ enum TestScript {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { step(lines[...]) }
     }
 
+    private static func findLabel(_ text: String, in v: NSView) -> NSTextField? {
+        if let t = v as? NSTextField, t.stringValue.contains(text) { return t }
+        for sub in v.subviews { if let hit = findLabel(text, in: sub) { return hit } }
+        return nil
+    }
+
     private static func step(_ lines: ArraySlice<String>) {
         guard let line = lines.first else { return }
         let rest = lines.dropFirst()
@@ -52,10 +58,25 @@ enum TestScript {
         case "resolve":
             if let c = ed!.word.commentAnchors(ed!.storage).compactMap({ ed!.word.comments[$0.id] }).first { ed!.setDone(c, true) }
         case "outline": ed!.toggleOutline(nil)
+        case "font": ed!.setFont(family: arg)
+        case "size": ed!.setFont(size: Double(arg))
+        case "bigger": ed!.fontBigger(nil)
+        case "image": if let d = try? Data(contentsOf: URL(fileURLWithPath: arg)) { ed!.insertImage(d, ext: (arg as NSString).pathExtension) }
+        case "zoom": ed!.setZoom(CGFloat(Double(arg) ?? 100) / 100)
+        case "clicktext":  // hit-tests the first label containing the text and clicks whatever receives it; sends no events, so nothing activates
+            if let w = ed!.window, let label = findLabel(arg, in: w.contentView!) {
+                let p = label.convert(NSPoint(x: label.bounds.midX, y: label.bounds.midY), to: nil)
+                let hit = w.contentView!.hitTest(w.contentView!.convert(p, from: nil))
+                log("hit \(hit.map { String(describing: type(of: $0)) } ?? "nil")")
+                (hit as? CardView)?.onClick?()
+                let r = tv!.selectedRange()
+                log("selection \((tv!.string as NSString).substring(with: r))")
+            } else { log("label not found: \(arg)") }
         case "scroll": tv!.scrollToEndOfDocument(nil)
         case "save":
             ed!.doc.save(to: URL(fileURLWithPath: arg), ofType: DocxDocument.docx, for: .saveToOperation) { err in log("saved \(err?.localizedDescription ?? "ok")") }
         case "text": log("text \(tv!.string.debugDescription)")
+        case "tabs": log("documents \(NSDocumentController.shared.documents.count), tabs in first window \(ed?.window?.tabbedWindows?.count ?? 1)")
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")

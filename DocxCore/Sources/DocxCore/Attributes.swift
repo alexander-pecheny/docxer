@@ -107,6 +107,32 @@ public final class RunProps: NSObject, @unchecked Sendable {
 
     public enum Toggle: String { case bold = "w:b", italic = "w:i", underline = "w:u", strike = "w:strike" }
 
+    /// A copy with the font family set, or removed (nil) so the style decides.
+    public func with(font: String?) -> RunProps {
+        var kids = rPr.filter { $0.name != "w:rFonts" }
+        var f = format
+        if let font {
+            let v = escapeXML(font, attribute: true)
+            kids.append(RawChild(name: "w:rFonts", xml: "<w:rFonts w:ascii=\"\(v)\" w:hAnsi=\"\(v)\" w:eastAsia=\"\(v)\" w:cs=\"\(v)\"/>"))
+        }
+        f.font = font
+        return RunProps(openAttrs: openAttrs, rPr: sortChildren(kids, rPrOrder), format: f)
+    }
+
+    /// A copy with the size in points set, or removed (nil) so the style decides.
+    public func with(size: Double?) -> RunProps {
+        var kids = rPr.filter { $0.name != "w:sz" && $0.name != "w:szCs" }
+        var f = format
+        if let size {
+            let half = Int((size * 2).rounded())
+            kids += [RawChild(name: "w:sz", xml: "<w:sz w:val=\"\(half)\"/>"), RawChild(name: "w:szCs", xml: "<w:szCs w:val=\"\(half)\"/>")]
+            f.size = Double(half) / 2
+        } else {
+            f.size = nil
+        }
+        return RunProps(openAttrs: openAttrs, rPr: sortChildren(kids, rPrOrder), format: f)
+    }
+
     /// A copy with a toggle set on, off, or removed (nil) so the style decides.
     public func with(_ t: Toggle, _ on: Bool?) -> RunProps {
         let names: Set<String> = switch t {
