@@ -156,14 +156,45 @@ final class CommentsPane: NSObject {
 
     func highlightSelection() {
         guard let c = controller else { return }
-        let sel = c.textView.selectedRange()
-        let hit = threads.first { NSLocationInRange(sel.location, $0.range) || (sel.location == NSMaxRange($0.range) && sel.length == 0) }
+        let hit = threadAtCaret(c)
+        let changed = hit?.comment.id != selectedId
         selectedId = hit?.comment.id
+        if changed, let hit { reveal(hit.comment.id) }
         for (id, card) in cards {
             card.layer?.borderColor = (id == selectedId ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
             card.layer?.borderWidth = id == selectedId ? 2 : 1
         }
         c.highlightAnchors(selected: hit?.comment)
+    }
+
+    /// The thread whose anchor holds the caret, or the character just before it.
+    private func threadAtCaret(_ c: EditorController) -> (comment: Comment, range: NSRange)? {
+        let loc = c.textView.selectedRange().location
+        for p in [loc, loc - 1] where p >= 0 && p < c.storage.length {
+            guard let m = c.storage.attribute(.docxMarks, at: p, effectiveRange: nil) as? MarkSet else { continue }
+            for id in m.comments {
+                guard var cm = c.word.comments[id] else { continue }
+                while let parent = c.word.comments.parent(of: cm) { cm = parent }
+                if let t = threads.first(where: { $0.comment === cm }) { return t }
+            }
+        }
+        return nil
+    }
+
+    /// Opens the pane if needed and scrolls the thread's card to the middle.
+    private func reveal(_ id: Int) {
+        controller?.showComments(true)
+        guard let card = cards[id], let doc = view.documentView else { return }
+        doc.layoutSubtreeIfNeeded()
+        let frame = card.convert(card.bounds, to: doc)
+        if view.contentView.bounds.contains(frame) { return }
+        let visible = view.contentView.bounds.height
+        let y = min(max(0, frame.midY - visible / 2), max(0, doc.frame.height - visible))
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            view.contentView.animator().setBoundsOrigin(NSPoint(x: 0, y: y))
+        }
+        view.reflectScrolledClipView(view.contentView)
     }
 
     private func label(_ s: String, bold: Bool = false, secondary: Bool = false) -> NSTextField {
