@@ -150,3 +150,26 @@ final class ZoomControl: NSStackView {
         }
     }
 }
+
+/// The window's root view: opens Word files dropped anywhere outside the text.
+final class DropStackView: NSStackView {
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        registerForDraggedTypes([.fileURL])
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func documents(_ info: NSDraggingInfo) -> [URL] {
+        let urls = info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        return urls.filter { EditorTextView.documentExtensions.contains($0.pathExtension.lowercased()) }
+    }
+
+    override func draggingEntered(_ info: NSDraggingInfo) -> NSDragOperation { documents(info).isEmpty ? [] : .copy }
+
+    override func performDragOperation(_ info: NSDraggingInfo) -> Bool {
+        let docs = documents(info)
+        for url in docs { NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in } }
+        return !docs.isEmpty
+    }
+}

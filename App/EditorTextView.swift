@@ -46,6 +46,13 @@ final class EditorTextView: NSTextView, NSTextLayoutManagerDelegate {
 
     static let documentExtensions: Set<String> = ["docx", "docm", "dotx"]
 
+    // NSTextView takes drag types from here, not from readablePasteboardTypes, and leaves out files without importsGraphics.
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] { readablePasteboardTypes }
+
+    override func dragOperation(for dragInfo: NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        type == .fileURL ? .copy : super.dragOperation(for: dragInfo, type: type)
+    }
+
     override func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
         guard let storage = textStorage, let doc = editor?.word else { return false }
         let range = selectedRange()

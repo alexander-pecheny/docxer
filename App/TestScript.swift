@@ -77,10 +77,43 @@ enum TestScript {
             ed!.doc.save(to: URL(fileURLWithPath: arg), ofType: DocxDocument.docx, for: .saveToOperation) { err in log("saved \(err?.localizedDescription ?? "ok")") }
         case "text": log("text \(tv!.string.debugDescription)")
         case "tabs": log("documents \(NSDocumentController.shared.documents.count), tabs in first window \(ed?.window?.tabbedWindows?.count ?? 1)")
+        case "dropfile":  // "dropfile text|root PATH": offers a fake file drag to a view, as Finder would
+            let parts = arg.split(separator: " ", maxSplits: 1).map(String.init)
+            let target: NSView = parts[0] == "text" ? tv! : ed!.window!.contentView!
+            let pb = NSPasteboard(name: NSPasteboard.Name("docxer-test-\(UUID().uuidString)"))
+            pb.clearContents()
+            pb.writeObjects([URL(fileURLWithPath: parts[1]) as NSURL])
+            let drag = FakeDrag(pb, at: target.convert(NSPoint(x: target.bounds.midX, y: 40), to: nil), window: ed!.window!)
+            let before = NSDocumentController.shared.documents.count
+            let op = target.draggingEntered(drag)
+            let ok = target.performDragOperation(drag)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                log("drop on \(parts[0]): accepted \(op.rawValue != 0), performed \(ok), documents \(before) -> \(NSDocumentController.shared.documents.count)")
+            }
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + (cmd == "wait" ? (Double(arg) ?? 1) : 0.15)) { step(rest) }
     }
+}
+
+final class FakeDrag: NSObject, NSDraggingInfo {
+    let draggingPasteboard: NSPasteboard
+    let draggingLocation: NSPoint
+    let draggingDestinationWindow: NSWindow?
+    init(_ pb: NSPasteboard, at p: NSPoint, window: NSWindow) { draggingPasteboard = pb; draggingLocation = p; draggingDestinationWindow = window }
+    var draggingSourceOperationMask: NSDragOperation { [.copy, .generic, .link] }
+    var draggedImageLocation: NSPoint { draggingLocation }
+    var draggedImage: NSImage? { nil }
+    var draggingSource: Any? { nil }
+    var draggingSequenceNumber: Int { 1 }
+    func slideDraggedImage(to screenPoint: NSPoint) {}
+    var draggingFormation: NSDraggingFormation = .default
+    var animatesToDestination = false
+    var numberOfValidItemsForDrop = 1
+    func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?, classes classArray: [AnyClass],
+                                searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:], using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+    var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+    func resetSpringLoading() {}
 }

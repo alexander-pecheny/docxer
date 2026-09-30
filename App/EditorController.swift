@@ -78,6 +78,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         tv.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue, .cursor: NSCursor.pointingHand]
         layout.delegate = tv
         textView = tv
+        tv.updateDragTypeRegistration()
 
         scroll = NSScrollView()
         scroll.documentView = tv
@@ -114,7 +115,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         bar.addView(status, in: .leading)
         bar.addView(zoomControl, in: .trailing)
         bar.edgeInsets = NSEdgeInsets(top: 3, left: 12, bottom: 4, right: 12)
-        let root = NSStackView(views: [split, bar])
+        let root = DropStackView(views: [split, bar])
         root.orientation = .vertical
         root.alignment = .leading
         root.spacing = 0
