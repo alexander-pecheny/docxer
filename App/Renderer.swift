@@ -177,10 +177,10 @@ final class Renderer: Styler {
         a[.font] = font(f.font, size: size, bold: f.bold ?? false, italic: f.italic ?? false)
         if f.underline == true || link { a[.underlineStyle] = NSUnderlineStyle.single.rawValue }
         if f.strike == true { a[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-        var fg: NSColor = link ? .linkColor : color(f.color) ?? .textColor
+        var fg: NSColor = link ? .linkColor : color(f.color).map(\.readableInDark) ?? .textColor
         if let h = f.highlight, let bg = highlight(h) {
             a[.backgroundColor] = bg
-            if f.color == nil || f.color == "auto" { fg = .black }
+            if !link { fg = color(f.color) ?? .black }
         }
         if f.hidden == true {
             fg = .tertiaryLabelColor
@@ -239,5 +239,40 @@ final class Renderer: Styler {
         guard let v else { return nil }
         if name == "white" || v == 0xFFFFFF { return nil }
         return NSColor(srgbRed: CGFloat(v >> 16) / 255, green: CGFloat(v >> 8 & 0xff) / 255, blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    }
+}
+
+private extension NSColor {
+    /// In dark mode the colour keeps its OKLCH hue but rises in lightness, as far as a dark colour sat below white, so that it reads on a dark page.
+    var readableInDark: NSColor {
+        guard let c = usingColorSpace(.sRGB) else { return self }
+        let lin = { (v: CGFloat) in v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        let r = lin(c.redComponent), g = lin(c.greenComponent), b = lin(c.blueComponent)
+        let l = cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        let m = cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        let s = cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        let L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+        let A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+        let B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+        let lifted = max(L, 1 - L / 2)
+        if lifted == L { return self }
+        var dark = self
+        for k in stride(from: 1.0, through: 0, by: -0.05) {
+            if let rgb = Self.srgb(lifted, A * k, B * k) { dark = NSColor(srgbRed: rgb.0, green: rgb.1, blue: rgb.2, alpha: c.alphaComponent); break }
+        }
+        let light = self
+        return NSColor(name: nil) { $0.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light }
+    }
+
+    private static func srgb(_ L: CGFloat, _ A: CGFloat, _ B: CGFloat) -> (CGFloat, CGFloat, CGFloat)? {
+        let l = pow(L + 0.3963377774 * A + 0.2158037573 * B, 3)
+        let m = pow(L - 0.1055613458 * A - 0.0638541728 * B, 3)
+        let s = pow(L - 0.0894841775 * A - 1.2914855480 * B, 3)
+        let rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+                   -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                   -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s]
+        guard rgb.allSatisfy({ $0 >= -0.0001 && $0 <= 1.0001 }) else { return nil }
+        let gamma = { (v: CGFloat) in min(1, max(0, v <= 0.0031308 ? 12.92 * v : 1.055 * pow(v, 1 / 2.4) - 0.055)) }
+        return (gamma(rgb[0]), gamma(rgb[1]), gamma(rgb[2]))
     }
 }
