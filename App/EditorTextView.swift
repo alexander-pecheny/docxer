@@ -139,10 +139,26 @@ final class EditorTextView: NSTextView, NSTextLayoutManagerDelegate {
         let m = super.menu(for: event) ?? NSMenu()
         m.insertItem(withTitle: "New Comment", action: #selector(EditorController.newComment(_:)), keyEquivalent: "", at: 0)
         m.insertItem(.separator(), at: 1)
+        if let at = linkIndex(event), let link = editor?.link(at: at) {
+            m.insertItem(ClosureMenuItem("Open Link") { NSWorkspace.shared.open(link.url) }, at: 0)
+            m.insertItem(ClosureMenuItem("Edit Link…") { [weak self] in self?.editor?.editLink(at: at) }, at: 1)
+            m.insertItem(.separator(), at: 2)
+        }
         return m
     }
 
+    /// The character under the mouse, if it is part of a link.
+    private func linkIndex(_ event: NSEvent) -> Int? {
+        let i = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
+        return [i, i - 1].first { editor?.link(at: $0) != nil }
+    }
+
     override func mouseDown(with event: NSEvent) {
+        // A plain click on a link places the caret; Command-click opens it.
+        if event.modifierFlags.contains(.command), let at = linkIndex(event), let link = editor?.link(at: at) {
+            NSWorkspace.shared.open(link.url)
+            return
+        }
         super.mouseDown(with: event)
         editor?.selectionMoved()
     }

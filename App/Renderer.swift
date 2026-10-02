@@ -58,7 +58,6 @@ final class Renderer: Styler {
             a = runDisplay(f.overlaid(r.format), link: link != nil)
             runCache[key] = a
         }
-        if let url = link?.url { a[.link] = url }
         return a
     }
 
@@ -103,7 +102,7 @@ final class Renderer: Styler {
                 }
             }
             for (r, d) in runs {
-                for k in [NSAttributedString.Key.link, .underlineStyle, .strikethroughStyle, .backgroundColor, .baselineOffset, .toolTip]
+                for k in [NSAttributedString.Key.underlineStyle, .strikethroughStyle, .backgroundColor, .baselineOffset, .toolTip]
                 where d[k] == nil { s.removeAttribute(k, range: r) }
                 s.addAttributes(d, range: r)
             }

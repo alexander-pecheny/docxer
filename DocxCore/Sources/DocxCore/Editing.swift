@@ -267,6 +267,16 @@ public extension WordDocument {
 }
 
 public extension WordDocument {
+    /// A copy of `link`, or a new link, that points at `url`.
+    func link(_ link: Hyperlink?, to url: URL) -> Hyperlink {
+        let id = package.addExternalRelationship(type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+                                                 target: url.absoluteString)
+        let tag = (link?.openTag ?? "<w:hyperlink w:history=\"1\">")
+            .replacingOccurrences(of: #"\s(r:id|w:anchor)="[^"]*""#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "<w:hyperlink", with: "<w:hyperlink r:id=\"\(id)\"")
+        return Hyperlink(openTag: tag, url: url, anchor: nil)
+    }
+
     /// Adds an image to the Package and returns the Sealed Object that shows it inline.
     /// `width` and `height` are in points; the image is scaled down to fit the text column.
     func makeImage(_ bytes: [UInt8], ext: String, width: Double, height: Double) -> Sealed {

@@ -19,6 +19,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private var toolbarItems: ToolbarItems!
     private var refreshPending = false
     private var relabelPending = false
+    let linkBubble = LinkBubble()
 
     init(document: DocxDocument) {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 820),
@@ -77,7 +78,6 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         tv.minSize = NSSize(width: 0, height: 0)
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         tv.textContainerInset = NSSize(width: 40, height: 40)
-        tv.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue, .cursor: NSCursor.pointingHand]
         layout.delegate = tv
         textView = tv
         tv.updateDragTypeRegistration()
@@ -97,6 +97,9 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         scroll.contentView.postsFrameChangedNotifications = true
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(layoutTextColumn), name: NSView.frameDidChangeNotification, object: scroll.contentView)
+        NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: .main) { [weak self] _ in
+            self?.linkBubble.close()
+        }
 
         outlinePane = OutlinePane(controller: self)
         commentsPane = CommentsPane(controller: self)
@@ -214,6 +217,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         fixTypingAttributes()
         toolbarItems.update()
         commentsPane.highlightSelection()
+        updateLinkBubble()
     }
 
     /// Typing at the edge of a link or comment should not extend it, as in Word.
@@ -230,7 +234,6 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         }
         if let l = t[.docxLink] as? Hyperlink, (next[.docxLink] as? Hyperlink) !== l, let p = t[.docxPara] as? ParaProps {
             t[.docxLink] = nil
-            t[.link] = nil
             for (k, v) in doc.renderer.runAttributes(p, t[.docxRun] as? RunProps ?? .plain, link: nil) { t[k] = v }
             t[.underlineStyle] = t[.underlineStyle]
         }

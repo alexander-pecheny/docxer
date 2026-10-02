@@ -74,9 +74,13 @@ final class DocxDocument: NSDocument {
     }
 
     override func showWindows() {
-        // Test runs launch in the background and must not cover the user's screen.
+        // Test runs launch in the background and invisible, so they never cover the user's screen; `snap` captures them.
         if UserDefaults.standard.bool(forKey: "DocxerBackgroundTest") {
-            windowControllers.forEach { $0.window?.orderBack(nil) }
+            for w in windowControllers.compactMap(\.window) {
+                w.alphaValue = 0
+                w.ignoresMouseEvents = true
+                w.orderBack(nil)
+            }
         } else {
             super.showWindows()
         }

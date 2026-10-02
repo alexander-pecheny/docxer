@@ -76,16 +76,24 @@ public final class DocxPackage {
             let entry = "<Override PartName=\"/\(path)\" ContentType=\"\(contentType)\"/>"
             setPart("[Content_Types].xml", Array(ct.replacingOccurrences(of: "</Types>", with: entry + "</Types>").utf8))
         }
-        var rels = String(decoding: part(relsPath) ?? Array(emptyRels.utf8), as: UTF8.self)
+        let rels = String(decoding: part(relsPath) ?? Array(emptyRels.utf8), as: UTF8.self)
         let target = path.hasPrefix(mainDirectory + "/") ? String(path.dropFirst(mainDirectory.count + 1)) : "/" + path
-        if !rels.contains("Target=\"\(target)\"") {
-            var n = relationships.count + 1
-            while relationships["rId\(n)"] != nil { n += 1 }
-            rels = rels.replacingOccurrences(of: "</Relationships>",
-                                             with: "<Relationship Id=\"rId\(n)\" Type=\"\(relationshipType)\" Target=\"\(target)\"/></Relationships>")
-            setPart(relsPath, Array(rels.utf8))
-            try? loadRelationships()
-        }
+        if !rels.contains("Target=\"\(target)\"") { addRelationship("Type=\"\(relationshipType)\" Target=\"\(target)\"") }
+    }
+
+    /// Adds a relationship from the main document to an outside address, such as a hyperlink's URL, and returns its id.
+    public func addExternalRelationship(type: String, target: String) -> String {
+        addRelationship("Type=\"\(type)\" Target=\"\(escapeXML(target, attribute: true))\" TargetMode=\"External\"")
+    }
+
+    @discardableResult
+    private func addRelationship(_ attrs: String) -> String {
+        var n = relationships.count + 1
+        while relationships["rId\(n)"] != nil { n += 1 }
+        let rels = String(decoding: part(relsPath) ?? Array(emptyRels.utf8), as: UTF8.self)
+        setPart(relsPath, Array(rels.replacingOccurrences(of: "</Relationships>", with: "<Relationship Id=\"rId\(n)\" \(attrs)/></Relationships>").utf8))
+        try? loadRelationships()
+        return "rId\(n)"
     }
 
     /// Declares a content type for a file extension unless one exists.

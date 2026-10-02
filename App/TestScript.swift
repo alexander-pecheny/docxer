@@ -126,6 +126,18 @@ enum TestScript {
             sv.setMagnification(sv.magnification * (Double(arg) ?? 2), centeredAt: NSPoint(x: before.midX, y: before.midY))
             let after = imageFrame()
             log("pinch: magnification \(sv.magnification), container \(container) -> \(tv!.textContainer!.size.width), textView \(Int(width)) -> \(Int(tv!.frame.width)), image \(before.origin) -> \(after.origin), image visible \(sv.contentView.bounds.intersects(after)), zoom label \(Int(ed!.zoom * 100))%")
+        case "setlink":  // "setlink TEXT|URL": edits the link at the caret
+            let parts = arg.components(separatedBy: "|")
+            if let span = ed!.link(at: tv!.selectedRange().location) { ed!.setLink(span, text: parts[0], address: parts[1]) } else { log("no link") }
+        case "editlink": ed!.editLink(at: tv!.selectedRange().location)
+        case "responder": log("first responder is text view: \(ed!.window!.firstResponder === tv), key window: \(ed!.window!.isKeyWindow)")
+        case "snap":  // "snap PATH": saves the window, then any bubble or sheet over it, as PATH-0.png, PATH-1.png…
+            let w = ed!.window!
+            for (i, win) in ([w] + (w.childWindows ?? []) + [w.attachedSheet].compactMap { $0 }).enumerated() {
+                guard let v = win.contentView?.superview ?? win.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) else { continue }
+                v.cacheDisplay(in: v.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(arg)-\(i).png"))
+            }
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")
