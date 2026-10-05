@@ -140,6 +140,8 @@ public final class StyleSheet: @unchecked Sendable {
     public private(set) var defaultRun = RunFormat()
     public private(set) var defaultPara = ParaFormat()
     public private(set) var defaultParagraphStyle: String?
+    private var tableStyles: [String: (basedOn: String?, borders: [String: Table.Border], margins: [String: Double])] = [:]
+    private var defaultTableStyle: String?
     private var paraCache: [String: (ParaFormat, RunFormat)] = [:]
     private var charCache: [String: RunFormat] = [:]
     private let lock = NSLock()   // caches fill from the background loader too
@@ -163,6 +165,12 @@ public final class StyleSheet: @unchecked Sendable {
                 if styles[id] == nil { order.append(id) }
                 styles[id] = s
                 if type == "paragraph", x.attr(c, "w:default") == "1" { defaultParagraphStyle = id }
+                if type == "table" {
+                    let tblPr = x.child(c, x.id("w:tblPr"))
+                    tableStyles[id] = (val("w:basedOn"), tblPr.flatMap { x.child($0, x.id("w:tblBorders")) }.map { parseBorders(x, $0) } ?? [:],
+                                       tblPr.flatMap { x.child($0, x.id("w:tblCellMar")) }.map { parseMargins(x, $0) } ?? [:])
+                    if x.attr(c, "w:default") == "1" { defaultTableStyle = id }
+                }
             default: break
             }
         }
@@ -180,6 +188,16 @@ public final class StyleSheet: @unchecked Sendable {
         for s in chain.reversed() { p = p.overlaid(s.para); r = r.overlaid(s.run) }
         paraCache[key] = (p, r)
         return (p, r)
+    }
+
+    /// Borders and cell margins a table style resolves to, by side (including insideH and insideV).
+    func resolved(tableStyle id: String?) -> (borders: [String: Table.Border], margins: [String: Double]) {
+        var chain: [String] = []
+        var cur = id ?? defaultTableStyle
+        while let c = cur, let s = tableStyles[c], chain.count < 20 { chain.append(c); cur = s.basedOn }
+        var b: [String: Table.Border] = [:], m: [String: Double] = [:]
+        for c in chain.reversed() { b.merge(tableStyles[c]!.borders) { $1 }; m.merge(tableStyles[c]!.margins) { $1 } }
+        return (b, m)
     }
 
     public func resolved(characterStyle id: String) -> RunFormat {

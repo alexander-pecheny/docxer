@@ -422,23 +422,86 @@ final class Reader {
 
     private func paragraphTexts(_ n: Int32) -> [String] {
         if x.name(n) == "w:p" { return [visibleText(n)] }
-        if x.name(n) == "w:tbl", case .table(let rows, _) = tableDisplay(n) { return rows.map { $0.joined(separator: "  |  ") } }
+        if x.name(n) == "w:tbl", case .table(let t) = tableDisplay(n) { return t.plainRows.map { $0.joined(separator: "  |  ") } }
         return x.children(n).flatMap { paragraphTexts($0) }
     }
 
     private func tableDisplay(_ t: Int32) -> Sealed.Display {
-        var rows: [[String]] = []
-        var widths: [Double] = []
+        let x = x
+        let tblPr = x.child(t, x.id("w:tblPr"))
+        let prop = { (name: String) in tblPr.flatMap { x.child($0, x.id(name)) } }
+        var (borders, margins) = doc.styles.resolved(tableStyle: prop("w:tblStyle").flatMap { x.attr($0, "w:val") })
+        if let b = prop("w:tblBorders") { borders.merge(parseBorders(x, b)) { $1 } }
+        if let m = prop("w:tblCellMar") { margins.merge(parseMargins(x, m)) { $1 } }
+        var percent: Double?
+        if let w = prop("w:tblW"), x.attr(w, "w:type") == "pct", let v = x.attr(w, "w:w") {
+            // Either "50%" or fiftieths of a percent.
+            percent = v.hasSuffix("%") ? Double(v.dropLast()).map { $0 / 100 } : Double(v).map { $0 / 5000 }
+        }
+        var columns: [Double] = []
+        var trs: [Int32] = []
         for c in x.children(t) {
             switch x.name(c) {
-            case "w:tblGrid":
-                widths = x.children(c).compactMap { twipsToPt(x.attr($0, "w:w")) }
-            case "w:tr":
-                rows.append(x.children(c).filter { x.name($0) == "w:tc" }.map { paragraphTexts($0).joined(separator: "\n") })
+            case "w:tblGrid": columns = x.children(c).compactMap { twipsToPt(x.attr($0, "w:w")) }
+            case "w:tr": trs.append(c)
             default: break
             }
         }
-        return .table(rows: rows, columnWidths: widths)
+        var rows: [[Table.Cell]] = [], minHeights: [Double] = []
+        for (r, tr) in trs.enumerated() {
+            minHeights.append(x.child(tr, x.id("w:trPr")).flatMap { x.child($0, x.id("w:trHeight")) }.flatMap { twipsToPt(x.attr($0, "w:val")) } ?? 0)
+            let tcs = x.children(tr).filter { x.name($0) == "w:tc" }
+            rows.append(tcs.enumerated().map { k, tc in
+                let tcPr = x.child(tc, x.id("w:tcPr"))
+                let cellProp = { (name: String) in tcPr.flatMap { x.child($0, x.id(name)) } }
+                let span = max(1, cellProp("w:gridSpan").flatMap { x.attr($0, "w:val") }.flatMap(Int.init) ?? 1)
+                let own = cellProp("w:tcBorders").map { parseBorders(x, $0) } ?? [:]
+                let ownMargins = cellProp("w:tcMar").map { parseMargins(x, $0) } ?? [:]
+                let outer = ["top": r == 0, "left": k == 0, "bottom": r == trs.count - 1, "right": k == tcs.count - 1]
+                let inner = ["top": "insideH", "bottom": "insideH", "left": "insideV", "right": "insideV"]
+                return Table.Cell(text: cellText(tc), span: span,
+                                  borders: tableSides.map { own[$0] ?? borders[outer[$0]! ? $0 : inner[$0]!] },
+                                  margins: tableSides.map { ownMargins[$0] ?? margins[$0] ?? ($0 == "left" || $0 == "right" ? 5.4 : 0) })
+            })
+        }
+        return .table(Table(rows: rows, minHeights: minHeights, columns: columns, percent: percent,
+                            align: prop("w:jc").flatMap { x.attr($0, "w:val") }))
+    }
+
+    /// A cell's paragraphs styled as body text would be, so the table shows real fonts, sizes and alignment.
+    private func cellText(_ tc: Int32) -> NSAttributedString {
+        let s = NSMutableAttributedString()
+        guard let styler else { return NSAttributedString(string: paragraphTexts(tc).joined(separator: "\n")) }
+        for p in x.children(tc) where x.name(p) == "w:p" || x.name(p) == "w:tbl" {
+            if s.length > 0 { s.append(NSAttributedString(string: "\n", attributes: s.attributes(at: s.length - 1, effectiveRange: nil))) }
+            guard x.name(p) == "w:p" else { s.append(NSAttributedString(string: paragraphTexts(p).joined(separator: "\n"))); continue }
+            let pPr = x.child(p, x.id("w:pPr"))
+            let kids = pPr.map { x.children($0).map { RawChild(name: x.name($0), xml: String(decoding: x.raw($0), as: UTF8.self)) } } ?? []
+            let props = ParaProps(openAttrs: "", pPr: kids, sectPr: nil, format: pPr.map { parseParaFormat(x, $0) } ?? ParaFormat(), raw: nil)
+            let pa = styler.paragraphAttributes(props)
+            let start = s.length
+            func runs(_ n: Int32) {
+                for c in x.children(n) {
+                    switch x.name(c) {
+                    case "w:pPr": break
+                    case "w:r":
+                        var a = styler.runAttributes(props, runProps(openAttrs: x.openTag(c).dropFirst(4), rPr: x.child(c, x.id("w:rPr"))), link: nil)
+                        a.merge(pa) { old, _ in old }
+                        s.append(NSAttributedString(string: visibleText(c).replacingOccurrences(of: "\n", with: "\u{2028}"), attributes: a))
+                    default: runs(c)
+                    }
+                }
+            }
+            runs(p)
+            if s.length == start {
+                // An empty paragraph still takes a line at the size of its mark.
+                let mark = pPr.flatMap { x.child($0, x.id("w:rPr")) }
+                var a = styler.runAttributes(props, runProps(openAttrs: [], rPr: mark), link: nil)
+                a.merge(pa) { old, _ in old }
+                s.append(NSAttributedString(string: "\u{200B}", attributes: a))
+            }
+        }
+        return s
     }
 
     func visibleText(_ n: Int32) -> String { DocxCore.visibleText(x, n) }

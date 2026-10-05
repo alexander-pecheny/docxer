@@ -81,7 +81,7 @@ final class EditingTests: XCTestCase {
         edit(d, s, NSRange(location: 0, length: 0), "before\nafter")
         let p = ParaProps.sealedBlock()
         let table = Sealed(xml: "<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w=\"100\"/></w:tblGrid><w:tr><w:tc><w:p/></w:tc></w:tr></w:tbl>",
-                           isBlock: true, display: .table(rows: [[""]], columnWidths: [5]))
+                           isBlock: true, display: .paragraphs([""]))
         s.insert(NSAttributedString(string: "\u{FFFC}\n", attributes: [.docxPara: p, .docxSealed: table]), at: 7)
         XCTAssertEqual(s.string, "before\n\u{FFFC}\nafter\n")
         XCTAssertFalse(d.allowsEdit(s, range: NSRange(location: 7, length: 0), replacement: "x"))

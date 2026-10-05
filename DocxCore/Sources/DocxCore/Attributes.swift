@@ -174,7 +174,7 @@ public final class Sealed: NSObject, @unchecked Sendable {
     public enum Display {
         case text(String)
         case image(relId: String, width: Double, height: Double)   // points
-        case table(rows: [[String]], columnWidths: [Double])
+        case table(Table)
         case paragraphs([String])
         case footnote(Int)
         case pageBreak
@@ -193,7 +193,7 @@ public final class Sealed: NSObject, @unchecked Sendable {
         switch display {
         case .text(let s): return s
         case .image: return ""
-        case .table(let rows, _): return rows.map { $0.joined(separator: "\t") }.joined(separator: "\n")
+        case .table(let t): return t.plainRows.map { $0.joined(separator: "\t") }.joined(separator: "\n")
         case .paragraphs(let p): return p.joined(separator: "\n")
         case .footnote(let n): return "[\(n)]"
         case .pageBreak: return ""
