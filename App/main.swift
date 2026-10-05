@@ -20,6 +20,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showSettings(_ sender: Any?) { SettingsWindow.shared.showWindow(nil) }
 }
 
+/// Mirrors Open Recent into our defaults, because macOS keys its own list to the code signature and every ad-hoc build changes it.
+final class DocumentController: NSDocumentController {
+    private static let key = "RecentPaths"
+    private let enabled = !UserDefaults.standard.bool(forKey: "DocxerBackgroundTest")
+
+    override init() {
+        super.init()
+        guard enabled else { return }
+        let paths = UserDefaults.standard.stringArray(forKey: Self.key) ?? recentDocumentURLs.map(\.path)
+        for p in paths.reversed() where FileManager.default.fileExists(atPath: p) { noteNewRecentDocumentURL(URL(fileURLWithPath: p)) }
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func noteNewRecentDocumentURL(_ url: URL) {
+        super.noteNewRecentDocumentURL(url)
+        guard enabled else { return }
+        var paths = UserDefaults.standard.stringArray(forKey: Self.key) ?? []
+        paths.removeAll { $0 == url.path }
+        paths.insert(url.path, at: 0)
+        UserDefaults.standard.set(Array(paths.prefix(maximumRecentDocumentCount)), forKey: Self.key)
+    }
+
+    override func clearRecentDocuments(_ sender: Any?) {
+        super.clearRecentDocuments(sender)
+        UserDefaults.standard.set([String](), forKey: Self.key)
+    }
+}
+
 enum MainMenu {
     static func build() -> NSMenu {
         let main = NSMenu()
@@ -122,6 +151,7 @@ enum MainMenu {
 }
 
 let app = NSApplication.shared
+_ = DocumentController()   // the first controller created becomes NSDocumentController.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()

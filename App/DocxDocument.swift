@@ -18,6 +18,11 @@ final class DocxDocument: NSDocument {
     }
 
     override class var autosavesInPlace: Bool { false }
+
+    /// An untitled document with no text has nothing worth saving, even if the user typed and deleted.
+    override var isDocumentEdited: Bool {
+        super.isDocumentEdited && !(fileURL == nil && storage.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
     override class var preservesVersions: Bool { false }
 
     override func read(from data: Data, ofType typeName: String) throws {

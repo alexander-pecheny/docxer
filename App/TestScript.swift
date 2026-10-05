@@ -138,6 +138,8 @@ enum TestScript {
                 v.cacheDisplay(in: v.bounds, to: rep)
                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "\(arg)-\(i).png"))
             }
+        case "dirty": (ed!.document as! NSDocument).updateChangeCount(.changeDone)
+        case "edited": log("edited \((ed!.document as! NSDocument).isDocumentEdited)")
         case "wait": break
         case "quit": NSApp.terminate(nil)
         default: log("unknown \(cmd)")
