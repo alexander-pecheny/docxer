@@ -44,6 +44,8 @@ public struct ParaFormat: Hashable, Sendable {
     public var ilvl: Int?
     public var contextualSpacing: Bool?
     public var shading: String?
+    /// The paragraph mark's run formatting, which Word also gives the list label.
+    public var mark: RunFormat?
 
     public init() {}
 
@@ -55,6 +57,7 @@ public struct ParaFormat: Hashable, Sendable {
         r.firstLine = o.firstLine ?? firstLine; r.align = o.align ?? align; r.outlineLevel = o.outlineLevel ?? outlineLevel
         if o.numId != nil { r.numId = o.numId; r.ilvl = o.ilvl ?? 0 } else if o.ilvl != nil { r.ilvl = o.ilvl }
         r.contextualSpacing = o.contextualSpacing ?? contextualSpacing; r.shading = o.shading ?? shading
+        r.mark = o.mark ?? mark
         return r
     }
 }
@@ -116,6 +119,7 @@ public func parseParaFormat(_ x: XDoc, _ pPr: Int32) -> ParaFormat {
             if let l = x.child(c, x.id("w:ilvl")) { f.ilvl = x.attr(l, "w:val").flatMap(Int.init) }
         case "w:contextualSpacing": f.contextualSpacing = onOff(x, c)
         case "w:shd": if let fill = x.attr(c, "w:fill"), fill != "auto" { f.shading = fill }
+        case "w:rPr": f.mark = parseRunFormat(x, c)
         default: break
         }
     }
@@ -239,6 +243,8 @@ public final class Numbering: @unchecked Sendable {
         public var text = "%1."
         public var indentLeft: Double?
         public var firstLine: Double?
+        public var run: RunFormat?
+        public var suffix = "tab"
     }
 
     public private(set) var abstracts: [Int: [Int: Level]] = [:]
@@ -258,6 +264,8 @@ public final class Numbering: @unchecked Sendable {
                     lv.start = val("w:start").flatMap(Int.init) ?? 1
                     lv.format = val("w:numFmt") ?? "decimal"
                     lv.text = val("w:lvlText") ?? ""
+                    lv.suffix = val("w:suff") ?? "tab"
+                    lv.run = x.child(l, x.id("w:rPr")).map { parseRunFormat(x, $0) }
                     if let p = x.child(l, x.id("w:pPr")) {
                         let pf = parseParaFormat(x, p)
                         lv.indentLeft = pf.indentLeft; lv.firstLine = pf.firstLine

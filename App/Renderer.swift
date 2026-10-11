@@ -28,20 +28,33 @@ final class Renderer: Styler {
         let (styleFormat, styleRun) = doc.styles.resolved(paragraphStyle: p.styleId)
         var f = styleFormat
         var label: String?
+        var level: Numbering.Level?
         let numbered = styleFormat.overlaid(p.format)
         if let n = numbered.numId, n != 0, let lvl = doc.numbering.level(n, numbered.ilvl ?? 0) {
             // Indent precedence: style, then list level, then direct formatting.
             f.indentLeft = lvl.indentLeft ?? f.indentLeft
             f.firstLine = lvl.firstLine ?? f.firstLine
             label = doc.numbering.label(numId: n, ilvl: numbered.ilvl ?? 0, counters: &counters)
+            level = lvl
         }
         f = f.overlaid(p.format)
         var a: [NSAttributedString.Key: Any] = [:]
-        if let label, !label.isEmpty {
+        if let label, !label.isEmpty, let level {
             let left = f.indentLeft ?? 0, first = f.firstLine ?? 0
             let labelX = first < 0 ? left + first : max(0, left - 18)
-            f.firstLine = nil
-            a[.listLabel] = NSAttributedString(string: label, attributes: runDisplay(styleRun, link: false))
+            var run = styleRun.overlaid(f.mark ?? RunFormat())
+            if let r = level.run { run = run.overlaid(r) }
+            let text = NSAttributedString(string: label, attributes: runDisplay(run, link: false))
+            // A label wider than the hanging indent pushes the text on, as Word's tab or space after it does.
+            let end = labelX + text.size().width
+            let textStart: Double
+            switch level.suffix {
+            case "space": textStart = end + NSAttributedString(string: " ", attributes: text.attributes(at: 0, effectiveRange: nil)).size().width
+            case "nothing": textStart = end
+            default: textStart = end < left ? left : (end / tabInterval).rounded(.down) * tabInterval + tabInterval
+            }
+            f.firstLine = textStart - left
+            a[.listLabel] = text
             a[.listLabelX] = labelX
         }
         a[.paragraphStyle] = paragraphStyle(f)
@@ -134,6 +147,8 @@ final class Renderer: Styler {
 
     // MARK: mapping
 
+    private let tabInterval = 36.0
+
     private lazy var blockStyle: NSParagraphStyle = {
         let p = NSMutableParagraphStyle()
         p.paragraphSpacing = 6; p.paragraphSpacingBefore = 6
@@ -160,7 +175,7 @@ final class Renderer: Styler {
         case "both", "distribute", "lowKashida", "mediumKashida", "highKashida", "thaiDistribute": p.alignment = .justified
         default: p.alignment = .natural
         }
-        p.defaultTabInterval = 36
+        p.defaultTabInterval = tabInterval
         p.tabStops = []
         paraCache[f] = p
         return p
