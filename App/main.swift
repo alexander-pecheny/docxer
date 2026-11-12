@@ -1,6 +1,6 @@
 import AppKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build()
         // Crash-recovery copies go to a side location; the file itself changes only on Save.
@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         TestScript.runIfRequested()
+        Updater.shared.checkAtLaunch()
         guard UserDefaults.standard.bool(forKey: "DocxerBackgroundTest") else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             NSDocumentController.shared.documents.forEach { $0.showWindows() }
@@ -18,6 +19,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showSettings(_ sender: Any?) { SettingsWindow.shared.showWindow(nil) }
+
+    @MainActor @objc func checkForUpdates(_ sender: Any?) { Updater.shared.checkFromMenu(sender) }
+
+    @MainActor func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard item.action == #selector(checkForUpdates(_:)) else { return true }
+        item.title = Updater.shared.menuTitle
+        return !Updater.shared.installing
+    }
 }
 
 /// Mirrors Open Recent into our defaults, because macOS keys its own list to the code signature and every ad-hoc build changes it.
@@ -71,7 +80,8 @@ enum MainMenu {
         let app = ProcessInfo.processInfo.processName
 
         submenu(app, [
-            item("About \(app)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))), sep(),
+            item("About \(app)", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+            item("Check for Updates…", #selector(AppDelegate.checkForUpdates(_:))), sep(),
             item("Settings…", #selector(AppDelegate.showSettings(_:)), ","), sep(),
             item("Hide \(app)", #selector(NSApplication.hide(_:)), "h"),
             item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]),

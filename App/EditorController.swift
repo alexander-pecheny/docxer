@@ -14,6 +14,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     private var commentsPane: CommentsPane!
     private var status: NSTextField!
     private var zoomControl: ZoomControl!
+    private var updateButton: NSButton!
     private var textZoom: CGFloat = 1
     private var highlighted: [(NSRange, String)] = []
     private var toolbarItems: ToolbarItems!
@@ -113,18 +114,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         split.setHoldingPriority(.defaultLow - 1, forSubviewAt: 1)
         split.autosaveName = "DocxerSplit"
 
-        status = NSTextField(labelWithString: "")
-        status.font = .systemFont(ofSize: 11)
-        status.textColor = .secondaryLabelColor
-
-        zoomControl = ZoomControl(controller: self)
-        zoomControl.show(scroll.magnification)
-        let bar = NSStackView()
-        bar.addView(status, in: .leading)
-        bar.addView(zoomControl, in: .trailing)
-        zoomControl.setHuggingPriority(.required, for: .horizontal)
-        status.setContentHuggingPriority(.defaultHigh, for: .horizontal)
-        bar.edgeInsets = NSEdgeInsets(top: 3, left: 12, bottom: 4, right: 12)
+        let bar = statusBar(zoom: scroll.magnification)
         let root = DropStackView(views: [split, bar])
         root.orientation = .vertical
         root.alignment = .leading
@@ -462,6 +452,34 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         commentsPane.reload()
         if commentsPane.view.isHidden, !word.commentAnchors(storage).isEmpty, !commentsPane.userHid { showComments(true) }
         status.stringValue = wordCount()
+    }
+
+    /// The strip under the document: word count, an update button while one is available, and zoom.
+    private func statusBar(zoom: CGFloat) -> NSStackView {
+        status = NSTextField(labelWithString: "")
+        status.font = .systemFont(ofSize: 11)
+        status.textColor = .secondaryLabelColor
+        updateButton = NSButton(title: "", target: Updater.shared, action: #selector(Updater.checkFromMenu(_:)))
+        updateButton.bezelStyle = .accessoryBarAction
+        updateButton.controlSize = .small
+        zoomControl = ZoomControl(controller: self)
+        zoomControl.show(zoom)
+        let bar = NSStackView()
+        bar.addView(status, in: .leading)
+        bar.addView(updateButton, in: .trailing)
+        bar.addView(zoomControl, in: .trailing)
+        zoomControl.setHuggingPriority(.required, for: .horizontal)
+        status.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        bar.edgeInsets = NSEdgeInsets(top: 3, left: 12, bottom: 4, right: 12)
+        showUpdate()
+        NotificationCenter.default.addObserver(forName: Updater.changed, object: nil, queue: .main) { [weak self] _ in self?.showUpdate() }
+        return bar
+    }
+
+    private func showUpdate() {
+        updateButton.title = Updater.shared.menuTitle
+        updateButton.isEnabled = !Updater.shared.installing
+        updateButton.isHidden = Updater.shared.available == nil
     }
 
     private func wordCount() -> String {

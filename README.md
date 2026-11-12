@@ -37,3 +37,5 @@ gh release create v0.2 --repo alexander-pecheny/docxer --verify-tag --generate-n
 ```
 
 Publishing runs `.github/workflows/release.yml`, which tests the core, builds a universal app versioned from the tag, signs it with the Developer ID certificate, notarises and staples it, and attaches `Docxer-0.2.zip`. The signing certificate and App Store Connect API key live in the GitHub repo's Actions secrets.
+
+A release build updates itself (`App/Updater.swift`). Once a day at launch it asks GitHub for the latest release. A newer one appears as a button in the status bar and in the app menu. The update downloads `Docxer-<version>.zip`, checks that the same Developer ID team signed it, replaces the app and restarts. A local build is ad-hoc signed and never updates, so the tag must stay `v<version>` and the asset name must not change.
