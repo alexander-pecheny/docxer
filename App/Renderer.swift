@@ -58,7 +58,7 @@ final class Renderer: Styler {
             a[.listLabelX] = labelX
         }
         a[.paragraphStyle] = paragraphStyle(f)
-        if let shading = f.shading, let c = color(shading) { a[.backgroundColor] = c }
+        if let shading = f.shading, let c = highlight(shading) { a[.backgroundColor] = c }
         return a
     }
 
@@ -72,6 +72,20 @@ final class Renderer: Styler {
             runCache[key] = a
         }
         return a
+    }
+
+    /// Word stretches only the spaces of a justified line, but TextKit spreads the letters of a line without any,
+    /// as when a word longer than the column breaks across lines. Such a paragraph is left-aligned instead.
+    func finishParagraph(_ range: NSRange, in s: NSMutableAttributedString) {
+        guard let style = s.attribute(.paragraphStyle, at: range.location, effectiveRange: nil) as? NSParagraphStyle,
+              style.alignment == .justified else { return }
+        let width = doc.textWidth - style.headIndent + min(0, style.tailIndent)
+        let para = s.attributedSubstring(from: range)
+        let overlong = Self.longWord.matches(in: para.string, range: NSRange(location: 0, length: para.length))
+            .contains { para.attributedSubstring(from: $0.range).size().width > width }
+        guard overlong, let natural = style.mutableCopy() as? NSMutableParagraphStyle else { return }
+        natural.alignment = .natural
+        s.addAttribute(.paragraphStyle, value: natural, range: range)
     }
 
     func sealedAttributes(_ p: ParaProps, _ r: RunProps?, _ s: Sealed) -> [NSAttributedString.Key: Any] {
@@ -102,6 +116,7 @@ final class Renderer: Styler {
             pa[.listLabel] = nil
             pa[.listLabelX] = nil
             s.addAttributes(pa, range: pr)
+            finishParagraph(pr, in: s)
             if pa[.backgroundColor] == nil, !props.isSealed { s.removeAttribute(.backgroundColor, range: pr) }
             var runs: [(NSRange, [NSAttributedString.Key: Any])] = []
             s.enumerateAttributes(in: pr) { a, r, _ in
@@ -148,6 +163,7 @@ final class Renderer: Styler {
     // MARK: mapping
 
     private let tabInterval = 36.0
+    private static let longWord = try! NSRegularExpression(pattern: "\\S{12,}")
 
     private lazy var blockStyle: NSParagraphStyle = {
         let p = NSMutableParagraphStyle()

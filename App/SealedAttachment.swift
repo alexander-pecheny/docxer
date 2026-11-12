@@ -27,10 +27,10 @@ final class SealedAttachment: NSTextAttachment {
 
     override func attachmentBounds(for attributes: [NSAttributedString.Key: Any], location: NSTextLocation, textContainer: NSTextContainer?,
                                    proposedLineFragment: CGRect, position: CGPoint) -> CGRect {
-        bounds(font: attributes[.font] as? NSFont ?? font, container: textContainer, proposed: proposedLineFragment)
+        bounds(font: attributes[.font] as? NSFont ?? font, container: textContainer, proposed: proposedLineFragment, at: position.x)
     }
 
-    func bounds(font: NSFont, container textContainer: NSTextContainer?, proposed proposedLineFragment: CGRect) -> CGRect {
+    func bounds(font: NSFont, container textContainer: NSTextContainer?, proposed proposedLineFragment: CGRect, at x: CGFloat) -> CGRect {
         let width = availableWidth(textContainer, proposedLineFragment)
         switch sealed.display {
         case .image(_, let w, let h):
@@ -43,7 +43,8 @@ final class SealedAttachment: NSTextAttachment {
             let size = label("\(n)", NSFont.systemFont(ofSize: font.pointSize * 0.65)).size()
             return CGRect(x: 0, y: 0, width: ceil(size.width) + 2, height: font.ascender)
         case .pageBreak:
-            return CGRect(x: 0, y: 0, width: width, height: 14)
+            // After text it fills the rest of the line: wrapping would leave that text on a justified, non-final line.
+            return CGRect(x: 0, y: 0, width: x > 0 && width - x >= 60 ? width - x : width, height: 14)
         case .table(let t):
             return CGRect(origin: .zero, size: tableLayout(t, width).size)
         case .paragraphs(let ps):
@@ -59,7 +60,7 @@ final class SealedAttachment: NSTextAttachment {
         override func cellFrame(for textContainer: NSTextContainer, proposedLineFragment lineFrag: NSRect, glyphPosition position: NSPoint,
                                 characterIndex charIndex: Int) -> NSRect {
             guard let a = attachment as? SealedAttachment else { return .zero }
-            return a.bounds(font: a.font, container: textContainer, proposed: lineFrag)
+            return a.bounds(font: a.font, container: textContainer, proposed: lineFrag, at: position.x)
         }
 
         override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
