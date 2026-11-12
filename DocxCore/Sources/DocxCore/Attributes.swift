@@ -163,10 +163,16 @@ public final class RunProps: NSObject, @unchecked Sendable {
 }
 
 public final class Hyperlink: NSObject, @unchecked Sendable {
-    public let openTag: String   // `<w:hyperlink ...>` start tag, complete
+    /// `<w:hyperlink ...>` start tag, or for a HYPERLINK field its runs up to the result.
+    public let openTag: String
+    public let closeTag: String
     public let url: URL?
     public let anchor: String?
-    init(openTag: String, url: URL?, anchor: String?) { self.openTag = openTag; self.url = url; self.anchor = anchor }
+    init(openTag: String, closeTag: String = "</w:hyperlink>", url: URL?, anchor: String?) {
+        self.openTag = openTag; self.closeTag = closeTag; self.url = url; self.anchor = anchor
+    }
+
+    public var isField: Bool { closeTag != "</w:hyperlink>" }
 }
 
 /// Content the app shows but cannot edit, carried through saving verbatim.

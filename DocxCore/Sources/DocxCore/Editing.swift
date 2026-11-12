@@ -271,7 +271,7 @@ public extension WordDocument {
     func link(_ link: Hyperlink?, to url: URL) -> Hyperlink {
         let id = package.addExternalRelationship(type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
                                                  target: url.absoluteString)
-        let tag = (link?.openTag ?? "<w:hyperlink w:history=\"1\">")
+        let tag = (link.flatMap { $0.isField ? nil : $0.openTag } ?? "<w:hyperlink w:history=\"1\">")
             .replacingOccurrences(of: #"\s(r:id|w:anchor)="[^"]*""#, with: "", options: .regularExpression)
             .replacingOccurrences(of: "<w:hyperlink", with: "<w:hyperlink r:id=\"\(id)\"")
         return Hyperlink(openTag: tag, url: url, anchor: nil)

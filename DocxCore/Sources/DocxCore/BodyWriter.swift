@@ -142,7 +142,7 @@ struct BodyWriter {
     }
 
     private mutating func setLink(_ l: Hyperlink?) {
-        if link != nil { w("</w:hyperlink>") }
+        if let link { w(link.closeTag) }
         link = l
         if let l { w(l.openTag) }
     }

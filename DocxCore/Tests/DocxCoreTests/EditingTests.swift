@@ -187,3 +187,24 @@ extension EditingTests {
         XCTAssertEqual(d2.package.partPath(forRelationship: rel).flatMap { d2.package.part($0) }, png)
     }
 }
+
+extension EditingTests {
+    func testHyperlinkFieldReadsAsEditableLink() throws {
+        let field = """
+        <w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> HYPERLINK "https://example.com/a" </w:instrText></w:r>\
+        <w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>example.com</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>
+        """
+        let d = try document(body: "<w:p><w:r><w:t xml:space=\"preserve\">See </w:t></w:r>\(field)</w:p>")
+        let s = d.load(styler: nil)
+        XCTAssertEqual(s.string, "See example.com\n")
+        let link = try XCTUnwrap(s.attribute(.docxLink, at: 4, effectiveRange: nil) as? Hyperlink)
+        XCTAssertEqual(link.url?.absoluteString, "https://example.com/a")
+        edit(d, s, NSRange(location: 5, length: 6), "XAMPLE")
+        let saved = String(decoding: try WordDocument(bytes: d.save(s)).package.part("word/document.xml")!, as: UTF8.self)
+        XCTAssertTrue(saved.contains(#"HYPERLINK "https://example.com/a""#))
+        let (_, s2) = try reopen(d, s)
+        XCTAssertEqual(s2.string, "See eXAMPLE.com\n")
+        XCTAssertEqual((s2.attribute(.docxLink, at: 4, effectiveRange: nil) as? Hyperlink)?.url, link.url)
+        XCTAssertNil(s2.attribute(.docxSealed, at: 4, effectiveRange: nil))
+    }
+}

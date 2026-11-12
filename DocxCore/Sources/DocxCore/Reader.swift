@@ -5,6 +5,8 @@ public protocol Styler: AnyObject {
     func paragraphAttributes(_ p: ParaProps) -> [NSAttributedString.Key: Any]
     func runAttributes(_ p: ParaProps, _ r: RunProps, link: Hyperlink?) -> [NSAttributedString.Key: Any]
     func sealedAttributes(_ p: ParaProps, _ r: RunProps?, _ s: Sealed) -> [NSAttributedString.Key: Any]
+    /// Adjusts a finished paragraph's attributes once its whole text is known.
+    func finishParagraph(_ range: NSRange, in s: NSMutableAttributedString)
 }
 
 struct MarkerPart {
@@ -158,6 +160,7 @@ final class Reader {
         var a = pAttrs
         if let markRun { a[.docxRun] = markRun }
         append("\n", a)
+        if let start = paraStarts.last { styler?.finishParagraph(NSRange(location: start, length: pos - start), in: out) }
         paraIndex += 1
     }
 
@@ -231,8 +234,17 @@ final class Reader {
 
     private func container(_ node: Int32) throws {
         var field: Field?
-        for c in x.children(node) {
+        var linkEnd: Int32?
+        let kids = Array(x.children(node))
+        var k = 0
+        while k < kids.count {
+            let c = kids[k]
+            k += 1
             let name = x.name(c)
+            if c == linkEnd {
+                link = nil; linkEnd = nil
+                continue
+            }
             if field != nil {
                 field!.xml += String(decoding: x.raw(c), as: UTF8.self)
                 noteComments(in: x.raw(c))
@@ -248,7 +260,10 @@ final class Reader {
             case "w:pPr", "w:proofErr", "w:smartTagPr", "w:customXmlPr":
                 break
             case "w:r":
-                if has(x.raw(c), "w:fldCharType=\"begin\"") {
+                if link == nil, let f = hyperlinkField(kids, from: k - 1) {
+                    link = f.link; linkEnd = f.end
+                    k = f.result
+                } else if has(x.raw(c), "w:fldCharType=\"begin\"") {
                     var f = Field(xml: String(decoding: x.raw(c), as: UTF8.self))
                     f.run = runProps(openAttrs: x.openTag(c).dropFirst(4), rPr: x.child(c, x.id("w:rPr")))
                     scanField(c, &f)
@@ -294,6 +309,39 @@ final class Reader {
             }
         }
         if field != nil { throw Locked() }
+    }
+
+    /// A HYPERLINK field whose result is plain runs reads as a link: the runs up to the result become its open tag,
+    /// the end run its close tag, so the result text stays editable.
+    private func hyperlinkField(_ kids: [Int32], from start: Int) -> (link: Hyperlink, result: Int, end: Int32)? {
+        func chars(_ r: Int32) -> [(String, String?)] {
+            x.children(r).filter { x.name($0) != "w:rPr" }.map { (x.name($0), x.attr($0, "w:fldCharType")) }
+        }
+        guard chars(kids[start]).first?.1 == "begin" else { return nil }
+        var instr = "", k = start, sep: Int?
+        while k < kids.count, sep == nil {
+            guard x.name(kids[k]) == "w:r" else { return nil }
+            for (name, type) in chars(kids[k]) {
+                switch (name, type) {
+                case ("w:fldChar", "begin") where k == start, ("w:instrText", _): break
+                case ("w:fldChar", "separate"): sep = k
+                default: return nil
+                }
+            }
+            for t in x.children(kids[k]) where x.name(t) == "w:instrText" { instr += x.text(t) }
+            k += 1
+        }
+        guard let sep, chars(kids[sep]).count == 1 else { return nil }
+        while k < kids.count, x.name(kids[k]) == "w:r", !has(x.raw(kids[k]), "<w:fldChar"), !has(x.raw(kids[k]), "<w:instrText") { k += 1 }
+        guard k < kids.count, k > sep + 1, x.name(kids[k]) == "w:r", chars(kids[k]).map(\.1) == ["end"] else { return nil }
+        let words = instr.split(separator: "\"", omittingEmptySubsequences: false).enumerated()
+            .flatMap { $0.offset % 2 == 1 ? [String($0.element)] : $0.element.split(separator: " ").map(String.init) }
+        guard words.first == "HYPERLINK", words.count > 1 else { return nil }
+        let anchor = words.firstIndex(of: "\\l").flatMap { $0 + 1 < words.count ? words[$0 + 1] : nil }
+        let url = words[1].hasPrefix("\\") ? nil : URL(string: words[1])
+        guard url != nil || anchor != nil else { return nil }
+        let open = kids[start ... sep].map { String(decoding: x.raw($0), as: UTF8.self) }.joined()
+        return (Hyperlink(openTag: open, closeTag: String(decoding: x.raw(kids[k]), as: UTF8.self), url: url, anchor: anchor), sep + 1, kids[k])
     }
 
     private func scanField(_ r: Int32, _ f: inout Field) {
